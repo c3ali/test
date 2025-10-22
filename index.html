@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Scanner - Professional Quality</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📄 Professional Document Scanner</h1>
+            <p>Scan documents with perfect perspective and lighting</p>
+        </header>
+
+        <div class="scanner-container">
+            <!-- Camera View -->
+            <div class="camera-section" id="cameraSection">
+                <video id="video" autoplay playsinline></video>
+                <canvas id="canvas" style="display: none;"></canvas>
+                <div class="controls">
+                    <button id="captureBtn" class="btn btn-primary">
+                        📸 Capture Document
+                    </button>
+                </div>
+            </div>
+
+            <!-- Processing View -->
+            <div class="processing-section" id="processingSection" style="display: none;">
+                <div class="preview-container">
+                    <div class="preview-box">
+                        <h3>Original</h3>
+                        <canvas id="originalCanvas"></canvas>
+                    </div>
+                    <div class="preview-box">
+                        <h3>Processed</h3>
+                        <canvas id="processedCanvas"></canvas>
+                    </div>
+                </div>
+                <div class="processing-controls">
+                    <button id="retakeBtn" class="btn btn-secondary">
+                        🔄 Retake
+                    </button>
+                    <button id="enhanceBtn" class="btn btn-primary">
+                        ✨ Auto-Enhance
+                    </button>
+                    <button id="downloadBtn" class="btn btn-success">
+                        💾 Download
+                    </button>
+                </div>
+                <div class="enhancement-options">
+                    <label>
+                        Brightness:
+                        <input type="range" id="brightnessSlider" min="-50" max="50" value="0">
+                        <span id="brightnessValue">0</span>
+                    </label>
+                    <label>
+                        Contrast:
+                        <input type="range" id="contrastSlider" min="0.5" max="2" step="0.1" value="1">
+                        <span id="contrastValue">1</span>
+                    </label>
+                    <label>
+                        <input type="checkbox" id="bwMode">
+                        Black & White Mode
+                    </label>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Processing document...</p>
+            </div>
+        </div>
+
+        <footer>
+            <p>Works best with good contrast between document and background</p>
+        </footer>
+    </div>
+
+    <!-- Load OpenCV.js -->
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()"></script>
+    <script src="app.js"></script>
+</body>
+</html>
