@@ -1,6 +1,10 @@
 # Professional Document Scanner
 
-A web-based document scanner that transforms photos of documents into professionally scanned PDFs with automatic edge detection, perspective correction, and lighting enhancement.
+A complete document scanning solution available in two versions:
+- **Web App**: Browser-based scanner using OpenCV.js (works on any device)
+- **Mobile App**: Native Android & iOS app built with Flutter
+
+Both versions transform photos of documents into professionally scanned images with automatic edge detection, perspective correction, and lighting enhancement.
 
 ## Features
 
@@ -98,15 +102,45 @@ For optimal results:
 - **CLAHE**: Adaptive histogram equalization for lighting
 - **Otsu's Thresholding**: Automatic binary threshold for B&W mode
 
-## File Structure
+## Project Structure
 
+This repository contains two complete implementations:
+
+### Web Version (Root Directory)
 ```
-document-scanner/
+.
 ├── index.html          # Main HTML interface
 ├── style.css           # Styling and responsive design
 ├── app.js             # Core application logic and OpenCV processing
-└── README.md          # This file
+└── README.md          # Main documentation
 ```
+
+### Mobile Version (mobile_app/)
+```
+mobile_app/
+├── lib/
+│   ├── main.dart                 # App entry point
+│   ├── screens/                  # Camera and preview screens
+│   └── utils/                    # Image processing utilities
+├── android/                      # Android configuration
+├── ios/                         # iOS configuration
+├── pubspec.yaml                 # Flutter dependencies
+└── README.md                    # Mobile app documentation
+```
+
+## Choosing Your Version
+
+### Use the Web App if:
+- You want zero installation
+- You need cross-platform compatibility
+- You prefer accessing via browser
+- You want quick prototyping
+
+### Use the Mobile App if:
+- You want native performance
+- You need offline functionality
+- You want app store distribution
+- You prefer dedicated mobile app experience
 
 ## Troubleshooting
 
