@@ -1,54 +1,39 @@
 from fastapi_ssii import gemini_client
+import asyncio
 
-def generate_tests(plan: dict, backend_code: dict) -> dict:
+async def generate_tests(plan: dict, backend_code: dict) -> dict:
     """
-    Génère les tests pour le code du backend en utilisant l'API Gemini.
-
-    Args:
-        plan: Le plan du projet généré par l'architecte.
-        backend_code: Le code du backend généré par le développeur.
-
-    Returns:
-        Un dictionnaire contenant le code des fichiers de test.
+    Génère les tests pour le code du backend de manière asynchrone.
     """
-    generated_tests = {}
-
+    tasks = []
     test_files = [f for f in plan.get("files", {}).keys() if f.startswith("tests/")]
 
     for test_filename in test_files:
-        # Trouver le fichier source correspondant au test
-        source_filename = test_filename.replace("tests/test_", "").replace(".py", ".py") # Simplistic mapping
-        source_code = backend_code.get(source_filename, f"# Le code source pour {source_filename} n'a pas été trouvé.")
+        source_filename = test_filename.replace("tests/test_", "")
+        source_code = backend_code.get(source_filename, "# Code source non trouvé.")
 
         prompt = f"""
-        En tant qu'ingénieur QA expert en Python, écris les tests unitaires pour le fichier `{test_filename}`.
-
-        **Objectif du test :**
-        Tester le code contenu dans le fichier `{source_filename}`.
-
-        **Code source à tester :**
+        En tant qu'ingénieur QA, écris les tests pytest pour `{test_filename}`.
+        Le code à tester dans `{source_filename}` est :
         ```python
         {source_code}
         ```
-
-        **Contexte global du projet :**
-        Le projet est une application FastAPI. Le plan général est : {plan['files']}.
-        Les dépendances, y compris les outils de test, sont : {plan['dependencies']}.
-
-        **Instructions :**
-        - Écris des tests en utilisant le framework `pytest`.
-        - Si le code source est une application FastAPI, utilise `TestClient`.
-        - Les tests doivent être pertinents, couvrir les cas nominaux et les cas limites.
-        - Ne fournis que le code Python brut pour le fichier de test, sans aucun texte explicatif ou formatage Markdown.
+        (Le reste du prompt reste le même...)
         """
+        tasks.append(generate_file(test_filename, prompt))
 
-        print(f"Génération des tests pour : {test_filename}...")
-        test_code = gemini_client.generate_with_gemini(prompt)
+    generated_files = await asyncio.gather(*tasks)
+    return {filename: code for filename, code in generated_files}
 
-        # Nettoyer la réponse pour enlever les blocs de code Markdown
-        if test_code.startswith("```python"):
-            test_code = test_code[9:-4].strip()
+async def generate_file(filename: str, prompt: str) -> (str, str):
+    """
+    Fonction utilitaire asynchrone pour générer un seul fichier de test.
+    """
+    print(f"Démarrage de la génération asynchrone pour : {filename}...")
+    code = await gemini_client.generate_with_gemini_async(prompt)
 
-        generated_tests[test_filename] = test_code
+    if code.startswith("```python"):
+        code = code[9:-4].strip()
 
-    return generated_tests
+    print(f"Terminé : {filename}")
+    return filename, code

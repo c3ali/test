@@ -2,40 +2,50 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-# Charger les variables d'environnement depuis le fichier .env
+# Charger les variables d'environnement
 load_dotenv()
-
-# Récupérer la clé API depuis les variables d'environnement
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Configurer l'API Gemini
+# --- Initialisation des clients ---
+model = None
+async_model = None
+
 if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_GEMINI_API_KEY":
     print("Attention : La clé API Gemini n'est pas configurée.")
-    # On peut soit lever une exception, soit continuer avec un client non fonctionnel
-    # Pour le moment, on affiche un avertissement.
-    model = None
 else:
     genai.configure(api_key=GEMINI_API_KEY)
-    # Rétablissement du modèle qui fonctionne pour l'utilisateur
+
+    # Client synchrone (pour les tâches non parallélisables comme l'analyse)
     model = genai.GenerativeModel('gemini-2.5-pro')
+
+    # Client asynchrone (pour la génération de fichiers en parallèle)
+    async_model = genai.GenerativeModel('gemini-2.5-pro')
+
+
+# --- Fonctions d'appel à l'API ---
 
 def generate_with_gemini(prompt: str) -> str:
     """
-    Envoie un prompt à l'API Gemini et retourne la réponse textuelle.
-
-    Args:
-        prompt: Le prompt à envoyer au modèle.
-
-    Returns:
-        La réponse générée par le modèle, ou un message d'erreur si l'API n'est pas configurée.
+    Appel SYNCHRONE à l'API Gemini.
     """
     if model is None:
-        return "Erreur : Le client Gemini n'est pas configuré. Veuillez vérifier votre clé API."
-
+        return "Erreur : Client Gemini non configuré."
     try:
         response = model.generate_content(prompt)
-        # Nettoyer la réponse pour enlever les potentiels marqueurs de formatage non désirés
         return response.text.strip()
     except Exception as e:
-        print(f"Une erreur est survenue lors de l'appel à l'API Gemini : {e}")
-        return f"Erreur lors de la génération de contenu : {e}"
+        print(f"Erreur Gemini (sync) : {e}")
+        return f"Erreur : {e}"
+
+async def generate_with_gemini_async(prompt: str) -> str:
+    """
+    Appel ASYNCHRONE à l'API Gemini.
+    """
+    if async_model is None:
+        return "Erreur : Client Gemini asynchrone non configuré."
+    try:
+        response = await async_model.generate_content_async(prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"Erreur Gemini (async) : {e}")
+        return f"Erreur : {e}"

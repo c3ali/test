@@ -1,26 +1,38 @@
 from fastapi_ssii.agents import architect, backend_developer, frontend_developer, qa_engineer
 from fastapi_ssii import project_store
+import asyncio
 
-def generate_project(description: str) -> dict:
+async def generate_project(description: str) -> dict:
     """
-    Orchestre la génération d'un NOUVEAU projet en appelant tous les agents.
+    Orchestre la génération d'un projet de manière asynchrone et parallèle.
     """
-    print("Étape 1 : Conception du projet par l'architecte...")
+    print("Étape 1 : Conception du projet par l'architecte (synchrone)...")
+    # L'architecture doit être définie avant de pouvoir générer le code.
     project_plan = architect.design_project(description)
 
     if not project_plan.get("files") or "error.py" in project_plan["files"]:
         return {"error": "La génération du plan a échoué.", "plan": project_plan}
 
-    print("Étape 2 : Génération du code backend...")
-    backend_code = backend_developer.generate_code(project_plan)
+    print("Étape 2 : Lancement de la génération parallèle du code...")
 
-    print("Étape 3 : Génération du code frontend...")
-    frontend_code = frontend_developer.generate_code(project_plan)
+    # Création des coroutines pour chaque groupe de tâches
+    backend_task = backend_developer.generate_code(project_plan)
+    frontend_task = frontend_developer.generate_code(project_plan)
 
-    print("Étape 4 : Génération des tests...")
-    tests = qa_engineer.generate_tests(project_plan, backend_code)
+    # Le QA doit attendre le code backend, donc il n'est pas dans le premier groupe.
+    # On pourrait l'optimiser davantage, mais c'est un bon début.
 
-    print("Étape 5 : Assemblage final...")
+    # Exécution des tâches de génération de code en parallèle
+    results = await asyncio.gather(backend_task, frontend_task)
+
+    backend_code = results[0]
+    frontend_code = results[1]
+
+    print("Étape 3 : Génération des tests (après le backend)...")
+    # L'agent QA a besoin du code backend pour générer les tests.
+    tests = await qa_engineer.generate_tests(project_plan, backend_code)
+
+    print("Étape 4 : Assemblage final...")
     full_code = {**backend_code, **frontend_code, **tests}
 
     return {
@@ -29,31 +41,25 @@ def generate_project(description: str) -> dict:
         "plan": project_plan
     }
 
-def refine_project(project_id: str, feedback: str):
+async def refine_project(project_id: str, feedback: str):
     """
-    Orchestre le raffinement d'un projet EXISTANT.
+    Orchestre le raffinement d'un projet (maintenant asynchrone).
     """
-    print(f"Démarrage du raffinement pour le projet {project_id} avec le feedback : '{feedback}'")
+    print(f"Démarrage du raffinement pour {project_id}...")
 
     current_project = project_store.get_project(project_id)
     if not current_project:
-        print(f"Erreur : Projet {project_id} non trouvé pour le raffinement.")
         return
 
-    current_plan = current_project["plan"]
-    current_code = current_project["code"]
-
-    print("Étape 2 (Raffinement) : Amélioration du code backend...")
-    refined_backend_code = backend_developer.refine_code(
-        plan=current_plan,
-        existing_code=current_code,
+    # La logique de raffinement peut aussi être parallélisée si nécessaire
+    refined_backend_code = await backend_developer.refine_code(
+        plan=current_project["plan"],
+        existing_code=current_project["code"],
         feedback=feedback
     )
 
-    updated_code = {**current_code, **refined_backend_code}
-
+    updated_code = {**current_project["code"], **refined_backend_code}
     project_store.update_project(project_id, {"code": updated_code, "status": "refined"})
 
     print(f"Raffinement du projet {project_id} terminé.")
-
     return project_store.get_project(project_id)
