@@ -1,41 +1,50 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from fastapi_ssii.agents import project_manager
-from typing import Dict, List, Any
+from fastapi import FastAPI, BackgroundTasks
+from pydantic import BaseModel, HttpUrl
+from typing import Optional
+from fastapi_ssii.webhook_sender import generation_task
+
+# --- Modèles Pydantic ---
 
 class ProjectRequest(BaseModel):
     description: str
+    response_webhook_url: HttpUrl # Rendu obligatoire pour ce point de terminaison
 
-class ProjectResponse(BaseModel):
+class ImmediateResponse(BaseModel):
+    status: str
     message: str
-    code: Dict[str, str]
-    plan: Dict[str, Any]
+
+# --- Application FastAPI ---
 
 app = FastAPI(
-    title="SSII World Class Agency (powered by Gemini)",
-    description="An API to generate code based on a project description, using a multi-agent system powered by Gemini.",
-    version="0.2.0",
+    title="SSII World Class Agency (Async with Webhooks)",
+    description="Une API pour générer du code de manière asynchrone et notifier via webhook.",
+    version="0.3.0",
 )
+
+# --- Points de terminaison de l'API ---
 
 @app.get("/", tags=["Health Check"])
 def read_root():
-    """A simple endpoint to check if the service is running."""
+    """Point de terminaison simple pour vérifier si le service est en ligne."""
     return {"status": "ok"}
 
-@app.post("/generate_project", response_model=ProjectResponse, tags=["Code Generation"])
-def generate_project(request: ProjectRequest):
+@app.post("/generate_project_async", response_model=ImmediateResponse, tags=["Code Generation"])
+async def generate_project_async(
+    request: ProjectRequest,
+    background_tasks: BackgroundTasks
+):
     """
-    Receives a project description and returns the generated code, plan, and dependencies.
+    Accepte une demande de génération, démarre le processus en arrière-plan
+    et renvoie une confirmation immédiate.
     """
-    # L'orchestration est entièrement gérée par le project_manager
-    generation_result = project_manager.generate_project(request.description)
+    # Ajoute la tâche de longue durée à exécuter en arrière-plan
+    background_tasks.add_task(
+        generation_task,
+        request.description,
+        request.response_webhook_url
+    )
 
-    # Si la génération a échoué, on retourne une réponse d'erreur
-    if "error" in generation_result:
-        return {
-            "message": "Project generation failed.",
-            "code": {"error.log": generation_result["error"]},
-            "plan": generation_result.get("plan", {})
-        }
-
-    return generation_result
+    return {
+        "status": "accepted",
+        "message": "La demande de génération a été acceptée et est en cours de traitement."
+    }

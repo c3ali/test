@@ -1,75 +1,61 @@
-import json
 from fastapi.testclient import TestClient
 from fastapi_ssii.main import app
 
 client = TestClient(app)
 
 def test_health_check():
-    """Teste si le point de terminaison de santé fonctionne."""
+    """Teste le point de terminaison de santé."""
     response = client.get("/")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
-def test_generate_project_with_mocked_gemini(mocker):
+def test_generate_project_async_success(mocker):
     """
-    Teste le workflow de génération de projet en simulant les réponses de Gemini.
+    Teste le point de terminaison asynchrone.
+    Vérifie que la réponse immédiate est correcte et que la tâche de fond
+    est bien appelée avec les bons arguments.
     """
-    # 1. Préparer les fausses réponses de Gemini pour chaque agent
+    # 1. Simuler (mocker) la fonction `generation_task` pour espionner ses appels
+    mock_generation_task = mocker.patch('fastapi_ssii.main.generation_task')
 
-    # Réponse simulée pour l'architecte
-    mock_plan = {
-      "files": {
-        "main.py": "Point d'entrée FastAPI.",
-        "tests/test_main.py": "Tests pour main.py."
-      },
-      "dependencies": ["fastapi", "pytest"]
+    # 2. Définir les données de la requête
+    webhook_url = "https://n8n.example.com/webhook/test"
+    request_data = {
+        "description": "Une super application de blog",
+        "response_webhook_url": webhook_url
     }
 
-    # Réponses simulées pour le développeur backend
-    mock_backend_code = "from fastapi import FastAPI\napp = FastAPI()"
+    # 3. Exécuter la requête sur le point de terminaison
+    response = client.post("/generate_project_async", json=request_data)
 
-    # Réponses simulées pour le développeur frontend
-    mock_frontend_code_html = "<h1>Mock Frontend</h1>"
-
-    # Réponses simulées pour l'ingénieur QA
-    mock_qa_code = "from main import app\ndef test_read_main(): pass"
-
-    # Configurer le mock pour retourner les réponses dans le bon ordre
-    mocker.patch(
-        'fastapi_ssii.gemini_client.generate_with_gemini',
-        side_effect=[
-            # 1. Appel de l'architecte
-            json.dumps(mock_plan),
-            # 2. Appel du dev backend pour main.py
-            mock_backend_code,
-            # 3. Appels du dev frontend
-            mock_frontend_code_html, # index.html
-            "/* mock css */",      # style.css
-            "// mock js",           # script.js
-            # 4. Appel de l'ingénieur QA pour tests/test_main.py
-            mock_qa_code
-        ]
-    )
-
-    # 2. Exécuter la requête API
-    response = client.post(
-        "/generate_project",
-        json={"description": "Une API simple"}
-    )
-
-    # 3. Valider la réponse
+    # 4. Valider la réponse immédiate
     assert response.status_code == 200
-    data = response.json()
+    response_json = response.json()
+    assert response_json["status"] == "accepted"
+    assert "La demande de génération a été acceptée" in response_json["message"]
 
-    assert data["message"] == "Projet généré avec succès !"
-    assert data["plan"] == mock_plan
+    # 5. Valider que la tâche de fond a été appelée correctement
+    # BackgroundTasks exécute la tâche après la réponse, donc nous vérifions
+    # que `add_task` a été appelé correctement. Pour ce test, nous nous fions
+    # à l'appel direct de la fonction mockée.
+    # NOTE : Un test plus complexe pourrait vérifier l'appel à `background_tasks.add_task`,
+    # mais mocker la fonction appelée est une approche plus simple et tout aussi efficace ici.
 
-    # Vérifier que le code généré correspond aux mocks
-    assert "main.py" in data["code"]
-    assert data["code"]["main.py"] == mock_backend_code
+    # Pour ce test, nous allons directement vérifier que `generation_task` a été appelé
+    # en supposant que l'appel `background_tasks.add_task` fonctionne comme attendu.
+    # Pour un test d'intégration plus profond, il faudrait une approche différente.
 
-    assert "index.html" in data["code"]
-    assert data["code"]["index.html"] == mock_frontend_code_html
+    # Ici, nous allons plutôt mocker `background_tasks.add_task` pour nous assurer qu'il est appelé.
+    mock_add_task = mocker.patch('fastapi.BackgroundTasks.add_task')
 
-    assert "tests/test_main.py" in data["code"]
-    assert data["code"]["tests/test_main.py"] == mock_qa_code
+    # On relance la requête avec le nouveau mock
+    client.post("/generate_project_async", json=request_data)
+
+    # On vérifie que `add_task` a été appelé une fois avec les bons arguments.
+    mock_add_task.assert_called_once()
+    # On récupère les arguments de l'appel
+    args, kwargs = mock_add_task.call_args
+    # Le premier argument doit être la fonction `generation_task` elle-même
+    # Les arguments suivants sont ceux passés à la tâche
+    assert args[1] == request_data["description"]
+    assert str(args[2]) == request_data["response_webhook_url"]
