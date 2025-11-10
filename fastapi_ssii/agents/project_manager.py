@@ -2,21 +2,37 @@ from fastapi_ssii.agents import architect, backend_developer, frontend_developer
 
 def generate_project(description: str) -> dict:
     """
-    Orchestrates the project generation process.
+    Orchestre le processus de génération de projet en faisant appel
+    séquentiellement aux agents spécialisés.
     """
-    # 1. Call the architect to design the project
+    print("Étape 1 : Conception du projet par l'architecte...")
     project_plan = architect.design_project(description)
 
-    # 2. Call the backend developer to generate the code
+    # Si le plan a échoué, on arrête le processus
+    if not project_plan.get("files") or "error.py" in project_plan["files"]:
+        print("Erreur : L'architecte n'a pas pu générer un plan de projet valide.")
+        return {"error": "La génération du plan a échoué.", "plan": project_plan}
+
+    print("Étape 2 : Génération du code backend...")
     backend_code = backend_developer.generate_backend_code(project_plan)
 
-    # 3. Call the frontend developer to generate the code
+    print("Étape 3 : Génération du code frontend...")
     frontend_code = frontend_developer.generate_frontend_code(project_plan)
 
-    # 4. Call the QA engineer to generate tests
-    tests = qa_engineer.generate_tests(backend_code)
+    print("Étape 4 : Génération des tests par l'ingénieur QA...")
+    # L'ingénieur QA a besoin du plan et du code backend pour écrire des tests pertinents
+    tests = qa_engineer.generate_tests(project_plan, backend_code)
 
-    # 5. Combine all the generated code
+    print("Étape 5 : Assemblage final du code...")
+    # Combinaison de tous les artefacts de code dans un seul dictionnaire
     full_code = {**backend_code, **frontend_code, **tests}
 
-    return full_code
+    # On pourrait aussi ajouter le plan et les dépendances à la réponse finale
+    # pour plus de contexte.
+    final_product = {
+        "message": "Projet généré avec succès !",
+        "code": full_code,
+        "plan": project_plan
+    }
+
+    return final_product
