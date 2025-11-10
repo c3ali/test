@@ -16,9 +16,8 @@ if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_GEMINI_API_KEY":
     model = None
 else:
     genai.configure(api_key=GEMINI_API_KEY)
-    # Remplacement par le modèle le plus avancé et publiquement documenté.
-    # Si cela échoue, l'utilisateur peut le remplacer par 'gemini-1.0-pro'.
-    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+    # Rétablissement du modèle qui fonctionne pour l'utilisateur
+    model = genai.GenerativeModel('gemini-2.5-pro')
 
 def generate_with_gemini(prompt: str) -> str:
     """
