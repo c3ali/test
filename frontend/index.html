@@ -9,24 +9,35 @@
 <body>
     <div class="container">
         <h1>Agence de Développement IA</h1>
-        <p>Décrivez l'application que vous souhaitez créer, et notre équipe d'agents IA la construira pour vous.</p>
+        <p>Décrivez votre projet, et nos agents IA le construiront et le déploieront pour vous.</p>
 
         <div id="generation-form">
-            <textarea id="project-description" placeholder="Exemple : Une simple API de blog en FastAPI avec des routes pour lister et créer des articles."></textarea>
-            <button id="generate-btn">Générer le projet</button>
+            <textarea id="project-description" placeholder="Exemple : Une API de blog en FastAPI..."></textarea>
+
+            <div class="github-options">
+                <h3>Options de déploiement GitHub (Optionnel)</h3>
+                <input type="text" id="github-repo-name" placeholder="Nom du nouveau dépôt GitHub">
+                <label>
+                    <input type="checkbox" id="github-is-private" checked>
+                    Rendre le dépôt privé
+                </label>
+            </div>
+
+            <button id="generate-btn">Générer & Déployer</button>
         </div>
 
         <div id="status-area"></div>
 
         <div id="results-area" class="hidden">
             <h2>Résultats du Projet (<span id="project-id-display"></span>)</h2>
+            <div id="github-link"></div>
             <div id="code-files"></div>
 
             <hr>
 
             <h3>Faire une modification</h3>
             <div id="refinement-form">
-                <textarea id="feedback-text" placeholder="Exemple : Ajoute une route pour supprimer un article par son ID."></textarea>
+                <textarea id="feedback-text" placeholder="Exemple : Ajoute une route pour supprimer un article..."></textarea>
                 <button id="refine-btn">Raffiner le projet</button>
             </div>
         </div>
