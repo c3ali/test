@@ -1,61 +1,68 @@
 from fastapi.testclient import TestClient
 from fastapi_ssii.main import app
+from fastapi_ssii import project_store
+import uuid
 
 client = TestClient(app)
 
-def test_health_check():
-    """Teste le point de terminaison de santé."""
+def test_read_frontend_index():
+    """Vérifie que la page d'accueil est bien servie."""
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert "text/html" in response.headers['content-type']
 
-def test_generate_project_async_success(mocker):
-    """
-    Teste le point de terminaison asynchrone.
-    Vérifie que la réponse immédiate est correcte et que la tâche de fond
-    est bien appelée avec les bons arguments.
-    """
-    # 1. Simuler (mocker) la fonction `generation_task` pour espionner ses appels
-    mock_generation_task = mocker.patch('fastapi_ssii.main.generation_task')
+def test_read_frontend_static_files():
+    """Vérifie que les fichiers statiques (CSS, JS) sont accessibles."""
+    response_css = client.get("/static/style.css")
+    assert response_css.status_code == 200
+    assert "text/css" in response_css.headers['content-type']
 
-    # 2. Définir les données de la requête
-    webhook_url = "https://n8n.example.com/webhook/test"
-    request_data = {
-        "description": "Une super application de blog",
-        "response_webhook_url": webhook_url
-    }
+    response_js = client.get("/static/script.js")
+    assert response_js.status_code == 200
+    # Correction : Le content-type peut être 'text/javascript'
+    assert "javascript" in response_js.headers['content-type']
 
-    # 3. Exécuter la requête sur le point de terminaison
+def test_get_project_status_success():
+    """Vérifie qu'on peut récupérer le statut d'un projet existant."""
+    desc = "Projet de test de statut"
+    project_id = project_store.create_new_project(desc)
+    project_store.update_project(project_id, {"status": "completed", "code": {"main.py": "print('ok')"}})
+
+    response = client.get(f"/project_status/{project_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == project_id
+    assert data["description"] == desc
+    assert data["status"] == "completed"
+    assert data["code"]["main.py"] == "print('ok')"
+
+def test_get_project_status_not_found():
+    """Vérifie qu'une erreur 404 est retournée pour un projet inconnu."""
+    unknown_id = str(uuid.uuid4())
+    response = client.get(f"/project_status/{unknown_id}")
+    assert response.status_code == 404
+
+def test_generate_project_creates_project_and_starts_task(mocker):
+    """Vérifie que l'endpoint de génération fonctionne."""
+    mock_add_task = mocker.patch('fastapi.BackgroundTasks.add_task')
+    request_data = {"description": "Test de génération"}
+
     response = client.post("/generate_project_async", json=request_data)
 
-    # 4. Valider la réponse immédiate
     assert response.status_code == 200
-    response_json = response.json()
-    assert response_json["status"] == "accepted"
-    assert "La demande de génération a été acceptée" in response_json["message"]
-
-    # 5. Valider que la tâche de fond a été appelée correctement
-    # BackgroundTasks exécute la tâche après la réponse, donc nous vérifions
-    # que `add_task` a été appelé correctement. Pour ce test, nous nous fions
-    # à l'appel direct de la fonction mockée.
-    # NOTE : Un test plus complexe pourrait vérifier l'appel à `background_tasks.add_task`,
-    # mais mocker la fonction appelée est une approche plus simple et tout aussi efficace ici.
-
-    # Pour ce test, nous allons directement vérifier que `generation_task` a été appelé
-    # en supposant que l'appel `background_tasks.add_task` fonctionne comme attendu.
-    # Pour un test d'intégration plus profond, il faudrait une approche différente.
-
-    # Ici, nous allons plutôt mocker `background_tasks.add_task` pour nous assurer qu'il est appelé.
-    mock_add_task = mocker.patch('fastapi.BackgroundTasks.add_task')
-
-    # On relance la requête avec le nouveau mock
-    client.post("/generate_project_async", json=request_data)
-
-    # On vérifie que `add_task` a été appelé une fois avec les bons arguments.
+    project_id = response.json().get("project_id")
+    assert project_id is not None
     mock_add_task.assert_called_once()
-    # On récupère les arguments de l'appel
-    args, kwargs = mock_add_task.call_args
-    # Le premier argument doit être la fonction `generation_task` elle-même
-    # Les arguments suivants sont ceux passés à la tâche
-    assert args[1] == request_data["description"]
-    assert str(args[2]) == request_data["response_webhook_url"]
+
+def test_refine_project_starts_refinement_task(mocker):
+    """Vérifie que l'endpoint de raffinement fonctionne."""
+    mock_add_task = mocker.patch('fastapi.BackgroundTasks.add_task')
+    project_id = project_store.create_new_project("Projet à raffiner")
+    request_data = {"feedback": "Feedback de test"}
+
+    response = client.post(f"/refine_project/{project_id}", json=request_data)
+
+    assert response.status_code == 200
+    assert response.json()["project_id"] == project_id
+    mock_add_task.assert_called_once()

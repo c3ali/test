@@ -1,38 +1,59 @@
 from fastapi_ssii.agents import architect, backend_developer, frontend_developer, qa_engineer
+from fastapi_ssii import project_store
 
 def generate_project(description: str) -> dict:
     """
-    Orchestre le processus de génération de projet en faisant appel
-    séquentiellement aux agents spécialisés.
+    Orchestre la génération d'un NOUVEAU projet en appelant tous les agents.
     """
     print("Étape 1 : Conception du projet par l'architecte...")
     project_plan = architect.design_project(description)
 
-    # Si le plan a échoué, on arrête le processus
     if not project_plan.get("files") or "error.py" in project_plan["files"]:
-        print("Erreur : L'architecte n'a pas pu générer un plan de projet valide.")
         return {"error": "La génération du plan a échoué.", "plan": project_plan}
 
     print("Étape 2 : Génération du code backend...")
-    backend_code = backend_developer.generate_backend_code(project_plan)
+    backend_code = backend_developer.generate_code(project_plan)
 
     print("Étape 3 : Génération du code frontend...")
-    frontend_code = frontend_developer.generate_frontend_code(project_plan)
+    frontend_code = frontend_developer.generate_code(project_plan)
 
-    print("Étape 4 : Génération des tests par l'ingénieur QA...")
-    # L'ingénieur QA a besoin du plan et du code backend pour écrire des tests pertinents
+    print("Étape 4 : Génération des tests...")
     tests = qa_engineer.generate_tests(project_plan, backend_code)
 
-    print("Étape 5 : Assemblage final du code...")
-    # Combinaison de tous les artefacts de code dans un seul dictionnaire
+    print("Étape 5 : Assemblage final...")
     full_code = {**backend_code, **frontend_code, **tests}
 
-    # On pourrait aussi ajouter le plan et les dépendances à la réponse finale
-    # pour plus de contexte.
-    final_product = {
+    return {
         "message": "Projet généré avec succès !",
         "code": full_code,
         "plan": project_plan
     }
 
-    return final_product
+def refine_project(project_id: str, feedback: str):
+    """
+    Orchestre le raffinement d'un projet EXISTANT.
+    """
+    print(f"Démarrage du raffinement pour le projet {project_id} avec le feedback : '{feedback}'")
+
+    current_project = project_store.get_project(project_id)
+    if not current_project:
+        print(f"Erreur : Projet {project_id} non trouvé pour le raffinement.")
+        return
+
+    current_plan = current_project["plan"]
+    current_code = current_project["code"]
+
+    print("Étape 2 (Raffinement) : Amélioration du code backend...")
+    refined_backend_code = backend_developer.refine_code(
+        plan=current_plan,
+        existing_code=current_code,
+        feedback=feedback
+    )
+
+    updated_code = {**current_code, **refined_backend_code}
+
+    project_store.update_project(project_id, {"code": updated_code, "status": "refined"})
+
+    print(f"Raffinement du projet {project_id} terminé.")
+
+    return project_store.get_project(project_id)
