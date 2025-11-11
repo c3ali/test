@@ -429,6 +429,7 @@ Create a `.env` file with necessary environment variables (database URL, API key
                 "database": None,
                 "deployment": None
             }
+            railway_result = None  # Initialiser pour éviter NameError
 
             try:
                 # Phase 2: Push vers GitHub (CRUCIAL pour Railway)
@@ -456,41 +457,58 @@ Create a `.env` file with necessary environment variables (database URL, API key
                 else:
                     logger.info("⚠️ GITHUB_ACCESS_TOKEN manquant, Railway ne pourra pas déployer depuis GitHub")
 
-                # Phase 3: Création Supabase (base de données)
+                # Phase 3: Création Supabase (base de données) - NON BLOQUANT
                 if supabase_token:
                     logger.info("🗄️ Phase 3: Création de la base de données Supabase")
 
-                    deployment_spec = {
-                        "tech_spec": generation_result["tech_spec"],
-                        "plan": generation_result["plan"],
-                        "code_files": generation_result["code"]
-                    }
+                    try:
+                        deployment_spec = {
+                            "tech_spec": generation_result["tech_spec"],
+                            "plan": generation_result["plan"],
+                            "code_files": generation_result["code"]
+                        }
 
-                    db_result = await self.deployment_agent.create_supabase_project(deployment_spec)
-                    deployment_details["database"] = db_result
-                    logger.info(f"✅ Base de données créée: {db_result.get('url')}")
+                        db_result = await self.deployment_agent.create_supabase_project(deployment_spec)
+                        deployment_details["database"] = db_result
+                        logger.info(f"✅ Base de données créée: {db_result.get('url')}")
+                    except Exception as e:
+                        logger.error(f"❌ Erreur Supabase (non bloquant): {str(e)}")
+                        print(f"[ERROR] Supabase creation failed: {str(e)}")  # Force stdout pour Railway logs
+                        import traceback
+                        print(traceback.format_exc())  # Stack trace complet
+                        deployment_details["database"] = {"error": str(e)}
+                        # Continuer quand même vers Railway
                 else:
                     logger.info("ℹ️ SUPABASE_ACCESS_TOKEN manquant, skip création DB")
 
-                # Phase 4: Déploiement Railway (depuis GitHub si disponible)
+                # Phase 4: Déploiement Railway (depuis GitHub si disponible) - NON BLOQUANT
                 if railway_token:
                     logger.info("☁️ Phase 4: Déploiement sur Railway")
 
-                    # Préparer les specs avec les infos GitHub et Supabase
-                    railway_spec = {
-                        "tech_spec": generation_result["tech_spec"],
-                        "plan": generation_result["plan"],
-                        "code_files": generation_result["code"],
-                        "github_repo": deployment_details.get("github", {}).get("url"),
-                        "database_config": deployment_details.get("database")
-                    }
+                    try:
+                        # Préparer les specs avec les infos GitHub et Supabase
+                        railway_spec = {
+                            "tech_spec": generation_result["tech_spec"],
+                            "plan": generation_result["plan"],
+                            "code_files": generation_result["code"],
+                            "github_repo": deployment_details.get("github", {}).get("url"),
+                            "database_config": deployment_details.get("database")
+                        }
 
-                    railway_result = await self.deployment_agent.deploy_to_railway(
-                        railway_spec,
-                        deployment_details.get("database", {})
-                    )
-                    deployment_details["deployment"] = railway_result
-                    logger.info(f"✅ Application déployée: {railway_result.get('url')}")
+                        railway_result = await self.deployment_agent.deploy_to_railway(
+                            railway_spec,
+                            deployment_details.get("database", {})
+                        )
+                        deployment_details["deployment"] = railway_result
+                        logger.info(f"✅ Application déployée: {railway_result.get('url')}")
+                    except Exception as e:
+                        logger.error(f"❌ Erreur Railway (non bloquant): {str(e)}")
+                        print(f"[ERROR] Railway deployment failed: {str(e)}")  # Force stdout
+                        import traceback
+                        print(traceback.format_exc())  # Stack trace complet
+                        deployment_details["deployment"] = {"error": str(e)}
+                else:
+                    logger.info("ℹ️ RAILWAY_TOKEN manquant, skip déploiement Railway")
 
                 # Phase 5: Vérification et auto-correction si nécessaire
                 if railway_result and railway_result.get("url"):
@@ -520,7 +538,10 @@ Create a `.env` file with necessary environment variables (database URL, API key
                 }
 
             except Exception as e:
-                logger.error(f"❌ Erreur lors du déploiement orchestré", error=str(e))
+                logger.error(f"❌ Erreur lors du déploiement orchestré: {str(e)}")
+                print(f"[ERROR] Deployment orchestration failed: {str(e)}")  # Force stdout
+                import traceback
+                print(traceback.format_exc())  # Stack trace complet
                 result["deployment"] = {
                     "status": "failed",
                     "error": str(e),
