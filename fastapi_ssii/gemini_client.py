@@ -29,23 +29,23 @@ def generate_with_gemini(prompt: str) -> str:
     Appel SYNCHRONE à l'API Gemini.
     """
     if model is None:
-        return "Erreur : Client Gemini non configuré."
+        raise RuntimeError("Client Gemini non configuré. Vérifiez que GEMINI_API_KEY est définie.")
     try:
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
         print(f"Erreur Gemini (sync) : {e}")
-        return f"Erreur : {e}"
+        raise RuntimeError(f"Erreur lors de l'appel à l'API Gemini: {e}") from e
 
 async def generate_with_gemini_async(prompt: str) -> str:
     """
     Appel ASYNCHRONE à l'API Gemini.
     """
     if async_model is None:
-        return "Erreur : Client Gemini asynchrone non configuré."
+        raise RuntimeError("Client Gemini asynchrone non configuré. Vérifiez que GEMINI_API_KEY est définie.")
     try:
         response = await async_model.generate_content_async(prompt)
         return response.text.strip()
     except Exception as e:
         print(f"Erreur Gemini (async) : {e}")
-        return f"Erreur : {e}"
+        raise RuntimeError(f"Erreur lors de l'appel à l'API Gemini: {e}") from e

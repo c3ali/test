@@ -18,16 +18,31 @@ class BusinessAnalystAgent(BaseAgent):
 
         prompt = self._build_prompt(description)
 
-        response_text = await self.llm_client.generate_with_gemini_async(prompt)
+        try:
+            response_text = await self.llm_client.generate_with_gemini_async(prompt)
+        except Exception as e:
+            logger.error("Erreur lors de l'appel à l'API Gemini.", error=str(e))
+            raise
 
         try:
+            # Nettoyage de la réponse si elle contient des balises markdown
             if response_text.startswith("```json"):
                 response_text = response_text[7:-4].strip()
+            elif response_text.startswith("```"):
+                # Gérer le cas où il y a juste ``` sans "json"
+                lines = response_text.split('\n')
+                response_text = '\n'.join(lines[1:-1]).strip()
+
             tech_spec = json.loads(response_text)
             self.validate_output(tech_spec)
             return tech_spec
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error("Échec de la création de la spécification technique.", error=str(e))
+        except json.JSONDecodeError as e:
+            logger.error("Échec du parsing JSON de la spécification technique.",
+                        error=str(e),
+                        response_preview=response_text[:500])
+            raise
+        except ValueError as e:
+            logger.error("Échec de la validation de la spécification technique.", error=str(e))
             raise
 
     def _build_prompt(self, description: str) -> str:
