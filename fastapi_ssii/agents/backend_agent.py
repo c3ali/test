@@ -28,20 +28,94 @@ class BackendAgent(BaseAgent):
         return {filename: code for filename, code in generated_files}
 
     def _build_prompt(self, filename: str, description: str, plan: Dict) -> str:
-        # La logique de construction du prompt est maintenant isolée.
-        # Plus tard, elle sera remplacée par le PromptBuilder.
-        return f"Écris le code Python pour le fichier `{filename}`. Description : {description}"
+        """
+        Construit le prompt pour la génération de code backend.
+        """
+        return f"""Génère le code Python complet et fonctionnel pour le fichier `{filename}`.
+
+Description: {description}
+
+IMPORTANT:
+- Réponds UNIQUEMENT avec du code Python pur, sans aucun texte explicatif
+- PAS de markdown (pas de ```, pas de ```python)
+- PAS de commentaires explicatifs avant ou après le code
+- PAS de description ou d'instructions
+- Commence directement par les imports ou le code
+- Le code doit être complet et prêt à être exécuté
+
+Génère uniquement le contenu du fichier Python."""
+
+    def _clean_code_response(self, code: str) -> str:
+        """
+        Nettoie la réponse pour extraire uniquement le code Python valide.
+        """
+        # 1. Enlever les balises markdown au début et à la fin
+        if "```python" in code:
+            # Extraire le code entre ```python et ```
+            start = code.find("```python") + 9
+            end = code.find("```", start)
+            if end != -1:
+                code = code[start:end]
+        elif code.startswith("```"):
+            # Gérer les balises ``` sans python
+            lines = code.split('\n')
+            # Trouver la première ligne après ```
+            start_idx = 1
+            # Trouver la dernière ligne avant ```
+            end_idx = len(lines)
+            for i in range(len(lines) - 1, 0, -1):
+                if lines[i].strip() == "```":
+                    end_idx = i
+                    break
+            code = '\n'.join(lines[start_idx:end_idx])
+
+        # 2. Supprimer le texte markdown/explicatif après le code
+        # Détecter les patterns de texte explicatif
+        lines = code.split('\n')
+        cleaned_lines = []
+        in_code = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Détecter le début du code Python
+            if not in_code and (
+                stripped.startswith(('import ', 'from ', 'def ', 'class ', 'async def', '@', '#'))
+                or (stripped and not stripped.startswith(('###', '**', '##', '-', '*', '>', 'Note:')))):
+                in_code = True
+
+            # Si on est dans le code, ajouter la ligne
+            if in_code:
+                # Arrêter si on détecte du markdown clair
+                if stripped.startswith(('###', '## ', '**Explanation', '**Note', '---', '```')):
+                    break
+                # Arrêter si ligne de texte explicatif après code vide
+                if not stripped and len(cleaned_lines) > 0:
+                    # Vérifier si les prochaines lignes sont du markdown
+                    continue
+                cleaned_lines.append(line)
+
+        code = '\n'.join(cleaned_lines).strip()
+
+        # 3. Supprimer les lignes vides excessives à la fin
+        while code.endswith('\n\n\n'):
+            code = code[:-1]
+
+        return code
 
     async def _generate_file(self, filename: str, prompt: str) -> (str, str):
         logger.info(f"Génération du fichier backend : {filename}")
         try:
-            code = await self.llm_client.generate_with_gemini_async(prompt)
-            # Nettoyage des balises markdown
-            if code.startswith("```python"):
-                code = code[9:-4].strip()
-            elif code.startswith("```"):
-                lines = code.split('\n')
-                code = '\n'.join(lines[1:-1]).strip()
+            raw_response = await self.llm_client.generate_with_gemini_async(prompt)
+
+            # Nettoyage robuste du code
+            code = self._clean_code_response(raw_response)
+
+            # Log pour débogage si le code semble contenir du markdown
+            if '```' in code or '###' in code or '**' in code:
+                print(f"[WARNING] Markdown détecté dans {filename} après nettoyage")
+                print(f"[DEBUG] Code preview: {code[:200]}")
+
             return filename, code
         except Exception as e:
             logger.error(f"Erreur lors de la génération du fichier backend : {filename}", error=str(e))
