@@ -11,8 +11,13 @@ class DevOpsAgent(BaseAgent):
         super().__init__("DevOpsAgent", llm_client)
 
     async def generate(self, specification: Dict[str, Any]) -> Dict[str, str]:
-        # ... (La logique de generate reste la même)
-        pass
+        """
+        Le DevOpsAgent ne génère pas de fichiers directement.
+        Il est utilisé via create_and_push_to_github() pour déployer sur GitHub.
+        Cette méthode retourne un dictionnaire vide pour satisfaire l'interface BaseAgent.
+        """
+        logger.info("DevOpsAgent.generate() appelé - cette méthode ne génère pas de fichiers.")
+        return {}
 
     def create_and_push_to_github(self, repo_name: str, code_files: dict, is_private: bool) -> str:
         github_token = os.getenv("GITHUB_ACCESS_TOKEN")
@@ -35,7 +40,7 @@ class DevOpsAgent(BaseAgent):
                 except GithubException as e:
                     if e.status == 422: # Le fichier existe déjà
                         # Logique de mise à jour si nécessaire
-                        logger.warn(f"Le fichier {file_path} existe déjà. Ignoré.")
+                        logger.info(f"Le fichier {file_path} existe déjà. Ignoré.")
                     else:
                         raise e
             return repo.html_url
@@ -49,5 +54,8 @@ class DevOpsAgent(BaseAgent):
             return f"Erreur inattendue : {e}"
 
     def validate_output(self, output: Dict[str, str]) -> List[str]:
-        # ... (La logique de validation reste la même)
-        pass
+        """
+        Valide la sortie du DevOpsAgent.
+        Pour le moment, aucune validation spécifique n'est nécessaire.
+        """
+        return []
