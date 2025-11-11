@@ -83,6 +83,7 @@ IMPORTANT:
 - PAS de description ou d'instructions
 - Commence directement par les imports ou le code
 - Le code doit être complet et prêt à être exécuté
+- VÉRIFIE LA COHÉRENCE: Si tu importes une fonction, assure-toi qu'elle existe avec le même nom exact
 
 IMPORTS ET STRUCTURE DE FICHIERS (TRÈS IMPORTANT):
 - Les fichiers comme models.py, schemas.py, database.py sont des FICHIERS UNIQUES, PAS des packages/répertoires
@@ -113,7 +114,33 @@ TYPAGE PYTHON (IMPORTANT pour compatibilité Python 3.12/3.13):
 - Exemple CORRECT: Mapped[list["ClassName"]]
 - Exemple INCORRECT: Mapped[List["ClassName"]]
 - Pour les annotations de type normales (hors Mapped), tu peux utiliser list, dict, set directement
-- N'importe pas List, Dict, Set depuis typing sauf si absolument nécessaire{frontend_instructions}
+- N'importe pas List, Dict, Set depuis typing sauf si absolument nécessaire
+
+CONVENTIONS DE NOMMAGE (CRITIQUE pour éviter les erreurs d'import):
+Utilise TOUJOURS ces noms de fonctions standards pour assurer la cohérence:
+
+📁 middleware/cors.py → fonction: setup_cors(app)
+   Import dans main.py: from middleware.cors import setup_cors
+
+📁 middleware/auth.py → fonction: setup_auth(app)
+   Import dans main.py: from middleware.auth import setup_auth
+
+📁 database.py → fonctions: get_db(), init_db()
+   Import: from database import get_db, init_db
+
+📁 config.py → classe: Settings (avec @property)
+   Import: from config import Settings
+
+📁 utils/*.py → noms descriptifs simples (get_*, create_*, validate_*)
+   Exemple: utils/email.py → send_email(), validate_email()
+   Import: from utils.email import send_email
+
+RÈGLE D'OR: Si tu crées middleware/cors.py avec setup_cors, TOUS les imports doivent utiliser setup_cors, PAS add_cors_middleware ou autre nom !
+
+Vérifie la cohérence:
+1. Définis la fonction: def setup_cors(app): ...
+2. Importe exactement le même nom: from middleware.cors import setup_cors
+3. Appelle exactement le même nom: setup_cors(app){frontend_instructions}
 
 Génère uniquement le contenu du fichier Python."""
 
