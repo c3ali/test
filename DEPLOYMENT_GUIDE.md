@@ -28,9 +28,9 @@ Cette plateforme peut maintenant **générer, déployer et auto-corriger** autom
 
 ### Tokens Requis
 
-1. **GEMINI_API_KEY** (obligatoire)
-   - Pour la génération de code
-   - Obtenir sur: https://makersuite.google.com/app/apikey
+1. **KIMI_API_KEY** (obligatoire)
+   - Pour la génération de code avec Kimi AI
+   - Obtenir sur: https://platform.moonshot.cn/
 
 2. **RAILWAY_TOKEN** (optionnel - pour déploiement)
    - Pour déployer l'application
@@ -52,7 +52,7 @@ cp .env.example .env
 2. Remplir les tokens dans `.env`:
 ```env
 # Obligatoire
-GEMINI_API_KEY=AIza...
+KIMI_API_KEY=your_kimi_key...
 
 # Pour déploiement automatique (optionnel)
 RAILWAY_TOKEN=...
