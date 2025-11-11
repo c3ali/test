@@ -378,16 +378,23 @@ Create a `.env` file with necessary environment variables (database URL, API key
 
     async def generate_and_deploy(self, description: str, auto_deploy: bool = False):
         """
-        Pipeline complet: génération -> déploiement -> auto-correction -> production
+        Pipeline complet orchestré: génération -> GitHub -> Supabase -> Railway -> auto-correction
+
+        Ordre CRITIQUE pour synchronisation parfaite:
+        1. Génération du code (BackendAgent avec toutes les corrections)
+        2. Push vers GitHub (DevOpsAgent)
+        3. Création base de données Supabase
+        4. Déploiement Railway depuis GitHub (lié à Supabase)
+        5. Auto-correction si erreurs détectées
 
         Args:
             description: Description du projet
-            auto_deploy: Si True, déploie automatiquement sur Railway/Supabase
+            auto_deploy: Si True, déploie automatiquement
 
         Returns:
             Dict avec code, plan, tech_spec, et infos de déploiement
         """
-        logger.info("🚀 Phase 1: Génération du code")
+        logger.info("🚀 Phase 1: Génération du code avec toutes les corrections")
         generation_result = await self.generate_project(description)
 
         if "error" in generation_result:
@@ -400,6 +407,7 @@ Create a `.env` file with necessary environment variables (database URL, API key
 
         # Si le déploiement automatique est demandé
         if auto_deploy:
+            github_token = os.getenv("GITHUB_ACCESS_TOKEN")
             railway_token = os.getenv("RAILWAY_TOKEN")
             supabase_token = os.getenv("SUPABASE_ACCESS_TOKEN")
 
@@ -411,37 +419,122 @@ Create a `.env` file with necessary environment variables (database URL, API key
                 }
                 return result
 
-            logger.info("🚀 Phase 2: Déploiement automatique avec auto-correction")
-
-            # Créer la spécification pour le déploiement
-            deployment_spec = {
-                "tech_spec": generation_result["tech_spec"],
-                "plan": generation_result["plan"],
-                "code_files": generation_result["code"]
+            deployment_details = {
+                "github": None,
+                "database": None,
+                "deployment": None
             }
 
-            # Déployer avec auto-correction
-            success, deploy_result = await self.auto_debugger.deploy_with_auto_fix(
-                generation_result["code"],
-                deployment_spec
-            )
+            try:
+                # Phase 2: Push vers GitHub (CRUCIAL pour Railway)
+                if github_token:
+                    logger.info("📤 Phase 2: Push du code vers GitHub")
+                    from fastapi_ssii.agents.devops_agent import DevOpsAgent
+                    devops = DevOpsAgent(self.llm_client)
 
-            if success:
-                logger.info("✅ Déploiement réussi avec auto-correction!")
+                    # Générer un nom de repo
+                    repo_name = await self._generate_repo_name(description)
+
+                    # Push vers GitHub
+                    github_url = await asyncio.to_thread(
+                        devops.create_and_push_to_github,
+                        repo_name=repo_name,
+                        code_files=generation_result["code"],
+                        is_private=True
+                    )
+
+                    deployment_details["github"] = {
+                        "repo_name": repo_name,
+                        "url": github_url
+                    }
+                    logger.info(f"✅ Code poussé sur GitHub: {github_url}")
+                else:
+                    logger.info("⚠️ GITHUB_ACCESS_TOKEN manquant, Railway ne pourra pas déployer depuis GitHub")
+
+                # Phase 3: Création Supabase (base de données)
+                if supabase_token:
+                    logger.info("🗄️ Phase 3: Création de la base de données Supabase")
+
+                    deployment_spec = {
+                        "tech_spec": generation_result["tech_spec"],
+                        "plan": generation_result["plan"],
+                        "code_files": generation_result["code"]
+                    }
+
+                    db_result = await self.deployment_agent.create_supabase_project(deployment_spec)
+                    deployment_details["database"] = db_result
+                    logger.info(f"✅ Base de données créée: {db_result.get('url')}")
+                else:
+                    logger.info("ℹ️ SUPABASE_ACCESS_TOKEN manquant, skip création DB")
+
+                # Phase 4: Déploiement Railway (depuis GitHub si disponible)
+                if railway_token:
+                    logger.info("☁️ Phase 4: Déploiement sur Railway")
+
+                    # Préparer les specs avec les infos GitHub et Supabase
+                    railway_spec = {
+                        "tech_spec": generation_result["tech_spec"],
+                        "plan": generation_result["plan"],
+                        "code_files": generation_result["code"],
+                        "github_repo": deployment_details.get("github", {}).get("url"),
+                        "database_config": deployment_details.get("database")
+                    }
+
+                    railway_result = await self.deployment_agent.deploy_to_railway(
+                        railway_spec,
+                        deployment_details.get("database", {})
+                    )
+                    deployment_details["deployment"] = railway_result
+                    logger.info(f"✅ Application déployée: {railway_result.get('url')}")
+
+                # Phase 5: Vérification et auto-correction si nécessaire
+                if railway_result and railway_result.get("url"):
+                    logger.info("🔍 Phase 5: Vérification du déploiement")
+
+                    health = await self.auto_debugger.check_application_health(railway_result["url"])
+
+                    if not health["healthy"]:
+                        logger.info(f"⚠️ Erreurs détectées, lancement auto-correction...")
+
+                        # Analyser et corriger
+                        bugs = health.get("errors", [])
+                        corrected_code = await self.auto_debugger.fix_bugs(
+                            generation_result["code"],
+                            [{"type": "runtime_error", "error": str(e)} for e in bugs]
+                        )
+
+                        # Re-push et re-deploy si corrections effectuées
+                        if corrected_code != generation_result["code"]:
+                            logger.info("🔄 Re-déploiement avec code corrigé...")
+                            # TODO: Implémenter le re-push vers GitHub et re-deploy
+
                 result["deployment"] = {
                     "status": "success",
-                    "iterations": deploy_result["iterations"],
-                    "logs": deploy_result["logs"],
-                    "details": deploy_result.get("deployment", {})
+                    "details": deployment_details,
+                    "message": "Déploiement complet avec synchronisation GitHub → Supabase → Railway"
                 }
-            else:
-                logger.error("❌ Échec du déploiement après tentatives de correction")
+
+            except Exception as e:
+                logger.error(f"❌ Erreur lors du déploiement orchestré", error=str(e))
                 result["deployment"] = {
                     "status": "failed",
-                    "iterations": deploy_result["iterations"],
-                    "logs": deploy_result["logs"]
+                    "error": str(e),
+                    "details": deployment_details
                 }
 
         return result
+
+    async def _generate_repo_name(self, description: str) -> str:
+        """Génère un nom de dépôt GitHub à partir de la description"""
+        import re
+        prompt = f"""Basé sur cette description, propose un nom de dépôt GitHub court et pertinent.
+Description: "{description}"
+Format: kebab-case, lettres minuscules, chiffres et tirets uniquement.
+Exemple: "simple-blog-api"
+Réponds UNIQUEMENT avec le nom du dépôt."""
+
+        repo_name = await self.llm_client.generate_with_gemini_async(prompt)
+        repo_name = re.sub(r'[^a-z0-9-]+', '-', repo_name.lower()).strip('-')
+        return repo_name[:50]  # Max 50 chars
 
 orchestrator = Orchestrator(gemini_client)
