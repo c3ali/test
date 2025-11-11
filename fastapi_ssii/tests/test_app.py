@@ -1,38 +1,54 @@
 import pytest
-from fastapi.testclient import TestClient
-from fastapi_ssii.main import app
+from fastapi_ssii.webhook_sender import async_generation_task
 from fastapi_ssii import project_store
-import uuid
 import asyncio
-
-client = TestClient(app)
 
 pytestmark = pytest.mark.asyncio
 
-# ... (les tests pour le frontend et le statut restent)
+async def test_auto_generate_repo_name_if_not_provided(mocker):
+    """
+    Vérifie que le nom du dépôt est généré s'il n'est pas fourni.
+    """
+    # Mocker toutes les dépendances externes
+    mock_project_manager = mocker.patch('fastapi_ssii.agents.project_manager.generate_project', return_value={"code": {}})
+    mock_devops_agent = mocker.patch('fastapi_ssii.agents.devops_agent.create_and_push_to_github')
+    # Mocker la fonction qui génère le nom
+    mock_generate_repo_name = mocker.patch('fastapi_ssii.webhook_sender.generate_repo_name', new_callable=mocker.AsyncMock, return_value="auto-name")
 
-async def test_generate_project_with_github_options(mocker):
-    """Vérifie que les options GitHub sont bien passées à la tâche de fond."""
-    mock_add_task = mocker.patch('fastapi.BackgroundTasks.add_task')
+    project_id = project_store.create_new_project("Test")
+    github_options = {"repo_name": "", "is_private": True}
 
-    request_data = {
-        "description": "Un projet à pousser sur GitHub",
-        "github_options": {
-            "repo_name": "test-repo",
-            "is_private": False
-        }
-    }
+    # Exécuter la tâche
+    await async_generation_task(project_id, "Test", None, github_options)
 
-    response = client.post("/generate_project_async", json=request_data)
+    # Vérifier que la génération de nom a été appelée
+    mock_generate_repo_name.assert_awaited_once()
 
-    assert response.status_code == 200
+    # Attendre que le thread DevOps ait une chance de s'exécuter
+    await asyncio.sleep(0.1)
 
-    mock_add_task.assert_called_once()
-    args, _ = mock_add_task.call_args
+    # Vérifier que l'agent DevOps a été appelé avec le nom généré
+    mock_devops_agent.assert_called_once()
+    assert mock_devops_agent.call_args[1]['repo_name'] == "auto-name"
 
-    github_opts = args[4]
-    assert github_opts is not None
-    assert github_opts["repo_name"] == "test-repo"
-    assert not github_opts["is_private"]
+async def test_use_provided_repo_name_if_exists(mocker):
+    """
+    Vérifie que le nom du dépôt fourni est utilisé et que la génération automatique n'est pas appelée.
+    """
+    mock_project_manager = mocker.patch('fastapi_ssii.agents.project_manager.generate_project', return_value={"code": {}})
+    mock_devops_agent = mocker.patch('fastapi_ssii.agents.devops_agent.create_and_push_to_github')
+    mock_generate_repo_name = mocker.patch('fastapi_ssii.webhook_sender.generate_repo_name', new_callable=mocker.AsyncMock)
 
-# On simplifie en enlevant le test d'intégration trop complexe
+    project_id = project_store.create_new_project("Test")
+    github_options = {"repo_name": "provided-name", "is_private": True}
+
+    await async_generation_task(project_id, "Test", None, github_options)
+
+    # Vérifier que la génération de nom N'A PAS été appelée
+    mock_generate_repo_name.assert_not_awaited()
+
+    await asyncio.sleep(0.1)
+
+    # Vérifier que l'agent DevOps a été appelé avec le nom fourni
+    mock_devops_agent.assert_called_once()
+    assert mock_devops_agent.call_args[1]['repo_name'] == "provided-name"

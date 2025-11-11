@@ -15,15 +15,20 @@
             <textarea id="project-description" placeholder="Exemple : Une API de blog en FastAPI..."></textarea>
 
             <div class="github-options">
-                <h3>Options de déploiement GitHub (Optionnel)</h3>
-                <input type="text" id="github-repo-name" placeholder="Nom du nouveau dépôt GitHub">
-                <label>
-                    <input type="checkbox" id="github-is-private" checked>
-                    Rendre le dépôt privé
+                <label class="main-label">
+                    <input type="checkbox" id="deploy-to-github">
+                    <strong>Déployer sur GitHub</strong>
                 </label>
+                <div id="github-details" class="hidden">
+                    <input type="text" id="github-repo-name" placeholder="Nom du dépôt (optionnel, sera généré si vide)">
+                    <label>
+                        <input type="checkbox" id="github-is-private" checked>
+                        Rendre le dépôt privé
+                    </label>
+                </div>
             </div>
 
-            <button id="generate-btn">Générer & Déployer</button>
+            <button id="generate-btn">Lancer la génération</button>
         </div>
 
         <div id="status-area"></div>
