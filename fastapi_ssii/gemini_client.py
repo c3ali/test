@@ -8,7 +8,7 @@ load_dotenv()
 # Utiliser OpenRouter avec Kimi K2
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_KIMI")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL_NAME = "moonshot/kimi-k2"  # Modèle Kimi K2 via OpenRouter
+MODEL_NAME = "moonshotai/kimi-k2-thinking"  # Modèle Kimi K2 Thinking via OpenRouter
 
 # --- Configuration ---
 api_configured = False
