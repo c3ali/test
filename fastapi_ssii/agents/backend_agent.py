@@ -31,9 +31,16 @@ class BackendAgent(BaseAgent):
         """
         Construit le prompt pour la génération de code backend.
         """
+        # Extraire la liste des fichiers du plan pour aider le LLM
+        available_files = list(plan.get("files", {}).keys())
+        files_info = "\n".join([f"- {f}" for f in available_files if f.endswith('.py')])
+
         return f"""Génère le code Python complet et fonctionnel pour le fichier `{filename}`.
 
 Description: {description}
+
+Fichiers Python disponibles dans le projet:
+{files_info}
 
 IMPORTANT:
 - Réponds UNIQUEMENT avec du code Python pur, sans aucun texte explicatif
@@ -42,6 +49,16 @@ IMPORTANT:
 - PAS de description ou d'instructions
 - Commence directement par les imports ou le code
 - Le code doit être complet et prêt à être exécuté
+
+IMPORTS ET STRUCTURE DE FICHIERS (TRÈS IMPORTANT):
+- Les fichiers comme models.py, schemas.py, database.py sont des FICHIERS UNIQUES, pas des packages
+- CORRECT: from models import User, Post
+- CORRECT: from database import engine, SessionLocal
+- INCORRECT: from models.user import User (models n'est PAS un package)
+- INCORRECT: from models.post import Post (models n'est PAS un package)
+- Si le fichier est dans un sous-dossier (ex: routers/users.py), utilise des imports relatifs ou absolus corrects
+- Exemple pour routers/users.py: from models import User OU from ..models import User
+- NE crée PAS d'imports vers des sous-modules qui n'existent pas
 
 TYPAGE PYTHON (IMPORTANT pour compatibilité Python 3.12/3.13):
 - Pour SQLAlchemy avec Mapped, utilise TOUJOURS les types en minuscules (list, dict, set) au lieu de typing.List, typing.Dict, etc.
