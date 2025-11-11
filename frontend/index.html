@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agence de Développement IA</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Agence de Développement IA</h1>
+        <p>Décrivez votre projet, et nos agents IA le construiront et le déploieront pour vous.</p>
+
+        <div id="generation-form">
+            <textarea id="project-description" placeholder="Exemple : Une API de blog en FastAPI..."></textarea>
+
+            <div class="github-options">
+                <label class="main-label">
+                    <input type="checkbox" id="deploy-to-github">
+                    <strong>Déployer sur GitHub</strong>
+                </label>
+                <div id="github-details" class="hidden">
+                    <input type="text" id="github-repo-name" placeholder="Nom du dépôt (optionnel, sera généré si vide)">
+                    <label>
+                        <input type="checkbox" id="github-is-private" checked>
+                        Rendre le dépôt privé
+                    </label>
+                </div>
+            </div>
+
+            <button id="generate-btn">Lancer la génération</button>
+        </div>
+
+        <div id="status-area"></div>
+
+        <div id="results-area" class="hidden">
+            <h2>Résultats du Projet (<span id="project-id-display"></span>)</h2>
+            <div id="github-link"></div>
+            <div id="code-files"></div>
+
+            <hr>
+
+            <h3>Faire une modification</h3>
+            <div id="refinement-form">
+                <textarea id="feedback-text" placeholder="Exemple : Ajoute une route pour supprimer un article..."></textarea>
+                <button id="refine-btn">Raffiner le projet</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
