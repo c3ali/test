@@ -1,8 +1,9 @@
 from fastapi_ssii.core.logger import get_logger
+from fastapi_ssii.agents.learning_agent import LearningAgent
 import httpx
 import re
 import asyncio
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
 logger = get_logger(__name__)
 
@@ -10,12 +11,15 @@ class AutoDebugger:
     """
     Agent autonome pour détecter et corriger automatiquement les bugs
     lors du déploiement.
+
+    Intégré avec LearningAgent pour apprendre des erreurs et améliorer
+    continuellement le code généré.
     """
 
-    def __init__(self, llm_client, deployment_agent):
+    def __init__(self, llm_client, deployment_agent, learning_agent: Optional[LearningAgent] = None):
         self.llm_client = llm_client
         self.deployment_agent = deployment_agent
-        self.max_iterations = 3  # Maximum d'essais de correction
+        self.learning_agent = learning_agent or LearningAgent(llm_client)
 
     async def deploy_with_auto_fix(
         self,
@@ -25,6 +29,9 @@ class AutoDebugger:
         """
         Déploie et corrige automatiquement les bugs jusqu'à réussite.
 
+        Utilise le LearningAgent pour apprendre des erreurs et adapter
+        intelligemment le nombre d'itérations (pas de limite fixe).
+
         Returns:
             (success: bool, result: dict)
         """
@@ -33,11 +40,11 @@ class AutoDebugger:
         logs_history = []
         current_code = code_files.copy()
 
-        logger.info(f"🚀 Début du déploiement avec auto-correction (max {self.max_iterations} essais)")
+        logger.info(f"🚀 Début du déploiement avec auto-correction intelligente (apprentissage activé)")
 
-        while iteration < self.max_iterations and not deployment_success:
+        while not deployment_success and self.learning_agent.should_continue_iterations(iteration):
             iteration += 1
-            logger.info(f"🔄 Itération {iteration}/{self.max_iterations}")
+            logger.info(f"🔄 Itération {iteration} (apprentissage actif)")
 
             # 1. Tenter le déploiement
             deployment_result = await self.deployment_agent.generate(specification)
@@ -56,8 +63,17 @@ class AutoDebugger:
                         break
                     else:
                         # Bugs runtime détectés
-                        bugs = health.get("errors", [])
-                        logger.info(f"⚠️ {len(bugs)} erreurs détectées")
+                        error_list = health.get("errors", [])
+                        logger.info(f"⚠️ {len(error_list)} erreurs détectées")
+
+                        # Convertir les erreurs en format bugs pour analyse
+                        bugs = []
+                        for error in error_list:
+                            bugs.append({
+                                "type": "runtime_error",
+                                "error": error,
+                                "file": "N/A"
+                            })
                 else:
                     # Pas d'URL, mais pas d'erreur non plus (création projet seulement)
                     deployment_success = True
@@ -71,9 +87,30 @@ class AutoDebugger:
 
                 bugs = await self.analyze_deployment_error(error_msg)
 
-            # 3. Corriger les bugs détectés
-            if bugs and iteration < self.max_iterations:
+            # 3. Apprentissage et correction des bugs détectés
+            if bugs:
                 logger.info(f"🔧 Correction de {len(bugs)} bugs...")
+
+                # Apprendre de chaque erreur
+                for bug in bugs:
+                    error_type = bug.get("type", "UnknownError")
+                    error_message = bug.get("error", str(bug))
+
+                    learning_result = await self.learning_agent.learn_from_error(
+                        error_type=error_type,
+                        error_message=error_message,
+                        context={
+                            "agent": "AutoDebugger",
+                            "file": bug.get("file", "N/A"),
+                            "bug_details": bug
+                        },
+                        iteration=iteration
+                    )
+
+                    if learning_result.get("action") == "permanent_improvement":
+                        logger.info(f"🎓 Amélioration permanente générée pour {learning_result.get('agent')}")
+
+                # Corriger le code
                 current_code = await self.fix_bugs(current_code, bugs)
 
                 # Mettre à jour le code dans la spécification
@@ -82,14 +119,19 @@ class AutoDebugger:
                 logs_history.append({
                     "iteration": iteration,
                     "bugs_found": len(bugs),
-                    "bugs": bugs
+                    "bugs": bugs,
+                    "learning_result": learning_result if 'learning_result' in locals() else None
                 })
+
+        # Obtenir les statistiques d'apprentissage
+        learning_stats = self.learning_agent.get_learning_stats()
 
         return deployment_success, {
             "code": current_code,
             "iterations": iteration,
             "logs": logs_history,
-            "deployment": deployment_result if 'deployment_result' in locals() else {}
+            "deployment": deployment_result if 'deployment_result' in locals() else {},
+            "learning_stats": learning_stats
         }
 
     async def check_application_health(self, url: str) -> Dict:

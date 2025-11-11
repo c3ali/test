@@ -1,14 +1,15 @@
 from fastapi_ssii.agents.base_agent import BaseAgent
 from fastapi_ssii.core.logger import get_logger
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 logger = get_logger(__name__)
 
 class BackendAgent(BaseAgent):
-    def __init__(self, llm_client):
+    def __init__(self, llm_client, learning_agent=None):
         super().__init__("BackendAgent", llm_client)
         self.add_dependency("ArchitectAgent")
+        self.learning_agent = learning_agent
 
     async def generate(self, specification: Dict[str, Any]) -> Dict[str, str]:
         """
@@ -57,6 +58,7 @@ class BackendAgent(BaseAgent):
         """
         Construit le prompt pour la génération de code backend.
         Si generated_code est fourni, extrait les signatures de fonctions pour le contexte.
+        Inclut les leçons apprises du LearningAgent si disponible.
         """
         # Extraire la liste des fichiers du plan pour aider le LLM
         available_files = list(plan.get("files", {}).keys())
@@ -74,6 +76,16 @@ class BackendAgent(BaseAgent):
                     for func_name in functions:
                         context_info += f"  - {func_name}\n"
             context_info += "\n⚠️ IMPORTANT: Utilise EXACTEMENT ces noms lors de l'import, PAS d'autres noms !\n"
+
+        # Récupérer les leçons apprises du LearningAgent
+        learned_lessons = ""
+        if self.learning_agent:
+            improvements = self.learning_agent.get_improvements_for_agent("BackendAgent")
+            if improvements:
+                learned_lessons = "\n\n🎓 LEÇONS APPRISES (erreurs récurrentes détectées et corrigées):\n\n"
+                learned_lessons += "\n\n".join(improvements)
+                learned_lessons += "\n\n⚠️ APPLIQUE CES LEÇONS POUR ÉVITER LES ERREURS RÉCURRENTES !\n"
+                logger.info(f"📚 {len(improvements)} leçons apprises ajoutées au prompt")
 
         # Détecter si le projet a un frontend
         has_frontend = any(f.endswith((".html", ".css", ".js", ".vue", ".jsx", ".tsx"))
@@ -222,6 +234,7 @@ CONVENTIONS DE NOMMAGE FONCTIONS (CRITIQUE):
 📁 config.py → Settings (classe)
 
 RÈGLE D'OR: Si tu crées setup_cors(), utilise setup_cors() partout, PAS add_cors_middleware !{frontend_instructions}
+{learned_lessons}
 
 Génère uniquement le contenu du fichier Python."""
 

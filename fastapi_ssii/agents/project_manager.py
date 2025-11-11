@@ -5,6 +5,7 @@ from fastapi_ssii.agents.qa_agent import QAAgent
 from fastapi_ssii.agents.business_analyst_agent import BusinessAnalystAgent
 from fastapi_ssii.agents.deployment_agent import DeploymentAgent
 from fastapi_ssii.agents.auto_debugger import AutoDebugger
+from fastapi_ssii.agents.learning_agent import LearningAgent
 from fastapi_ssii import gemini_client
 from fastapi_ssii.core.logger import get_logger
 from fastapi_ssii.core.context_manager import ContextManager
@@ -16,17 +17,21 @@ logger = get_logger(__name__)
 class Orchestrator:
     def __init__(self, llm_client):
         self.llm_client = llm_client
+
+        # Créer le LearningAgent d'abord pour qu'il soit disponible pour les autres agents
+        self.learning_agent = LearningAgent(llm_client)
+
         self.agents = {
             "business_analyst": BusinessAnalystAgent(llm_client),
             "architect": ArchitectAgent(llm_client),
-            "backend": BackendAgent(llm_client),
+            "backend": BackendAgent(llm_client, self.learning_agent),  # Pass learning_agent
             "frontend": FrontendAgent(llm_client),
             "qa": QAAgent(llm_client),
         }
 
-        # Agents de déploiement (optionnels selon tokens disponibles)
+        # Agents de déploiement
         self.deployment_agent = DeploymentAgent(llm_client)
-        self.auto_debugger = AutoDebugger(llm_client, self.deployment_agent)
+        self.auto_debugger = AutoDebugger(llm_client, self.deployment_agent, self.learning_agent)
 
     def _scan_imports_from_code(self, code_files: dict) -> list:
         """

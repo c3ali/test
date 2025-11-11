@@ -119,3 +119,6 @@ dmypy.json
 
 # Server logs
 server.log
+
+# Learning Agent knowledge base (generated at runtime)
+fastapi_ssii/knowledge/*.json
