@@ -1,65 +1,65 @@
-from fastapi_ssii.agents import architect, backend_developer, frontend_developer, qa_engineer
-from fastapi_ssii import project_store
+from fastapi_ssii.agents.architect_agent import ArchitectAgent
+from fastapi_ssii.agents.backend_agent import BackendAgent
+from fastapi_ssii.agents.frontend_agent import FrontendAgent
+from fastapi_ssii.agents.qa_agent import QAAgent
+from fastapi_ssii.agents.business_analyst_agent import BusinessAnalystAgent
+from fastapi_ssii import gemini_client
+from fastapi_ssii.core.logger import get_logger
+from fastapi_ssii.core.context_manager import ContextManager
 import asyncio
 
-async def generate_project(description: str) -> dict:
-    """
-    Orchestre la génération d'un projet de manière asynchrone et parallèle.
-    """
-    print("Étape 1 : Conception du projet par l'architecte (synchrone)...")
-    # L'architecture doit être définie avant de pouvoir générer le code.
-    project_plan = architect.design_project(description)
+logger = get_logger(__name__)
 
-    if not project_plan.get("files") or "error.py" in project_plan["files"]:
-        return {"error": "La génération du plan a échoué.", "plan": project_plan}
+class Orchestrator:
+    def __init__(self, llm_client):
+        self.llm_client = llm_client
+        self.agents = {
+            "business_analyst": BusinessAnalystAgent(llm_client),
+            "architect": ArchitectAgent(llm_client),
+            "backend": BackendAgent(llm_client),
+            "frontend": FrontendAgent(llm_client),
+            "qa": QAAgent(llm_client),
+        }
 
-    print("Étape 2 : Lancement de la génération parallèle du code...")
+    async def generate_project(self, description: str) -> dict:
+        context = ContextManager()
 
-    # Création des coroutines pour chaque groupe de tâches
-    backend_task = backend_developer.generate_code(project_plan)
-    frontend_task = frontend_developer.generate_code(project_plan)
+        logger.info("Phase 1: Business Analysis")
+        try:
+            tech_spec = await self.agents["business_analyst"].generate({"description": description})
+            # On enrichit la spécification pour les agents suivants
+            specification = {"description": description, "tech_spec": tech_spec, "context": context}
+        except Exception as e:
+            return {"error": f"Business Analysis failed: {e}"}
 
-    # Le QA doit attendre le code backend, donc il n'est pas dans le premier groupe.
-    # On pourrait l'optimiser davantage, mais c'est un bon début.
+        logger.info("Phase 2: Architecture")
+        try:
+            plan = await self.agents["architect"].generate(specification)
+            specification["plan"] = plan
+        except Exception as e:
+            return {"error": f"Architecture failed: {e}"}
 
-    # Exécution des tâches de génération de code en parallèle
-    results = await asyncio.gather(backend_task, frontend_task)
+        logger.info("Phase 3: Code Generation (Parallel)")
+        backend_task = self.agents["backend"].generate(specification)
+        frontend_task = self.agents["frontend"].generate(specification)
 
-    backend_code = results[0]
-    frontend_code = results[1]
+        results = await asyncio.gather(backend_task, frontend_task, return_exceptions=True)
+        backend_code = results[0] if not isinstance(results[0], Exception) else {}
+        frontend_code = results[1] if not isinstance(results[1], Exception) else {}
 
-    print("Étape 3 : Génération des tests (après le backend)...")
-    # L'agent QA a besoin du code backend pour générer les tests.
-    tests = await qa_engineer.generate_tests(project_plan, backend_code)
+        specification["backend_code"] = backend_code
 
-    print("Étape 4 : Assemblage final...")
-    full_code = {**backend_code, **frontend_code, **tests}
+        logger.info("Phase 4: QA & Testing")
+        tests = await self.agents["qa"].generate(specification)
 
-    return {
-        "message": "Projet généré avec succès !",
-        "code": full_code,
-        "plan": project_plan
-    }
+        logger.info("Phase 5: Assembly")
+        full_code = {**backend_code, **frontend_code, **tests}
 
-async def refine_project(project_id: str, feedback: str):
-    """
-    Orchestre le raffinement d'un projet (maintenant asynchrone).
-    """
-    print(f"Démarrage du raffinement pour {project_id}...")
+        return {
+            "message": "Project generated successfully!",
+            "code": full_code,
+            "plan": plan,
+            "tech_spec": tech_spec
+        }
 
-    current_project = project_store.get_project(project_id)
-    if not current_project:
-        return
-
-    # La logique de raffinement peut aussi être parallélisée si nécessaire
-    refined_backend_code = await backend_developer.refine_code(
-        plan=current_project["plan"],
-        existing_code=current_project["code"],
-        feedback=feedback
-    )
-
-    updated_code = {**current_project["code"], **refined_backend_code}
-    project_store.update_project(project_id, {"code": updated_code, "status": "refined"})
-
-    print(f"Raffinement du projet {project_id} terminé.")
-    return project_store.get_project(project_id)
+orchestrator = Orchestrator(gemini_client)
