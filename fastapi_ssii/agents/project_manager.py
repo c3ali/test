@@ -27,19 +27,36 @@ class Orchestrator:
         """
         deployment_files = {}
 
-        # 1. requirements.txt pour Python/FastAPI
+        # 1. runtime.txt pour spécifier la version Python (éviter Python 3.13)
+        runtime_content = "python-3.12.0"
+        deployment_files["runtime.txt"] = runtime_content
+        logger.info("Généré runtime.txt avec Python 3.12.0")
+
+        # 2. requirements.txt pour Python/FastAPI
         dependencies = plan.get("dependencies", [])
         if dependencies:
-            # S'assurer que les dépendances de base FastAPI sont présentes
-            essential_deps = ["fastapi", "uvicorn", "python-dotenv"]
-            for dep in essential_deps:
-                if not any(dep in d for d in dependencies):
-                    dependencies.append(dep)
+            # S'assurer que les dépendances de base FastAPI sont présentes avec versions compatibles
+            essential_deps = {
+                "fastapi": "fastapi>=0.109.0",
+                "uvicorn": "uvicorn[standard]>=0.27.0",
+                "python-dotenv": "python-dotenv>=1.0.0",
+                "pydantic": "pydantic>=2.6.0"  # Version compatible avec Python 3.12
+            }
+
+            # Ajouter les dépendances essentielles si absentes
+            for key, value in essential_deps.items():
+                if not any(key in d for d in dependencies):
+                    dependencies.append(value)
+                else:
+                    # Remplacer si version non spécifiée
+                    for i, dep in enumerate(dependencies):
+                        if dep == key:
+                            dependencies[i] = value
 
             deployment_files["requirements.txt"] = "\n".join(dependencies)
             logger.info(f"Généré requirements.txt avec {len(dependencies)} dépendances")
 
-        # 2. Procfile pour Railway/Heroku
+        # 3. Procfile pour Railway/Heroku
         # Déterminer le fichier d'entrée (main.py, app.py, etc.)
         entry_file = None
         for filename in plan.get("files", {}).keys():
@@ -57,7 +74,7 @@ class Orchestrator:
             deployment_files["Procfile"] = procfile_content
             logger.info(f"Généré Procfile avec point d'entrée: {module_name}:app")
 
-        # 3. package.json si frontend détecté
+        # 4. package.json si frontend détecté
         has_frontend = any(f.endswith((".html", ".css", ".js", ".vue", ".jsx", ".tsx"))
                           for f in plan.get("files", {}).keys())
 
@@ -86,7 +103,7 @@ class Orchestrator:
             deployment_files["package.json"] = json.dumps(package_json, indent=2)
             logger.info("Généré package.json pour le frontend")
 
-        # 4. .gitignore
+        # 5. .gitignore
         gitignore_content = """# Python
 __pycache__/
 *.py[cod]
@@ -141,7 +158,7 @@ build/
         deployment_files[".gitignore"] = gitignore_content
         logger.info("Généré .gitignore")
 
-        # 5. README.md
+        # 6. README.md
         readme_content = f"""# {tech_spec.get('project_summary', 'Project')}
 
 ## Description
