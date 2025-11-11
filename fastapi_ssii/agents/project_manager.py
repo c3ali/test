@@ -31,7 +31,7 @@ class Orchestrator:
         import_to_package = {
             'psycopg2': 'psycopg2-binary',
             'pymysql': 'pymysql',
-            'sqlalchemy': 'sqlalchemy',
+            'sqlalchemy': 'sqlalchemy>=2.0.0',  # Compatible Python 3.12/3.13
             'redis': 'redis',
             'celery': 'celery',
             'pandas': 'pandas',
@@ -40,8 +40,8 @@ class Orchestrator:
             'aiohttp': 'aiohttp',
             'jwt': 'PyJWT',
             'bcrypt': 'bcrypt',
-            'passlib': 'passlib',
-            'pydantic': 'pydantic',
+            'passlib': 'passlib[bcrypt]',  # Inclure support bcrypt
+            'pydantic': 'pydantic>=2.10.5',
             'jinja2': 'jinja2',
             'PIL': 'Pillow',
             'cv2': 'opencv-python',
@@ -49,6 +49,7 @@ class Orchestrator:
             'bs4': 'beautifulsoup4',
             'yaml': 'PyYAML',
             'dotenv': 'python-dotenv',
+            'starlette': 'starlette',  # Dépendance de FastAPI pour StaticFiles
         }
 
         detected_packages = set()
@@ -104,10 +105,10 @@ class Orchestrator:
         if dependencies:
             # S'assurer que les dépendances de base FastAPI sont présentes avec versions compatibles
             essential_deps = {
-                "fastapi": "fastapi>=0.109.0",
+                "fastapi": "fastapi>=0.115.6",  # Compatible Python 3.12/3.13
                 "uvicorn": "uvicorn[standard]>=0.27.0",
                 "python-dotenv": "python-dotenv>=1.0.0",
-                "pydantic": "pydantic>=2.6.0"  # Version compatible avec Python 3.12
+                "pydantic": "pydantic>=2.10.5"  # Compatible Python 3.12/3.13
             }
 
             # Ajouter les dépendances essentielles si absentes
@@ -225,7 +226,51 @@ build/
         deployment_files[".gitignore"] = gitignore_content
         logger.info("Généré .gitignore")
 
-        # 6. README.md
+        # 6. Dockerfile multi-stage pour polyglot (Python + Node.js)
+        if has_frontend:
+            # Déterminer le point d'entrée backend
+            backend_entry = "main:app"
+            for filename in plan.get("files", {}).keys():
+                if filename in ["main.py", "app.py", "server.py"]:
+                    module_name = filename[:-3]
+                    backend_entry = f"{module_name}:app"
+                    break
+
+            dockerfile_content = f"""FROM python:3.12-slim
+
+# Installer Node.js 20.x dans l'image Python
+RUN apt-get update && apt-get install -y curl gnupg \\
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \\
+    && apt-get install -y nodejs \\
+    && apt-get clean \\
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copier et installer les dépendances frontend
+COPY package*.json ./
+RUN npm install
+
+# Copier et installer les dépendances backend
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copier tout le code
+COPY . .
+
+# Build du frontend (génère dist/)
+RUN npm run build
+
+# Exposer le port
+EXPOSE 8080
+
+# Démarrer uniquement le backend (qui servira le frontend statique)
+CMD uvicorn {backend_entry} --host 0.0.0.0 --port ${{PORT:-8080}}
+"""
+            deployment_files["Dockerfile"] = dockerfile_content
+            logger.info(f"Généré Dockerfile multi-stage avec point d'entrée: {backend_entry}")
+
+        # 7. README.md
         readme_content = f"""# {tech_spec.get('project_summary', 'Project')}
 
 ## Description
@@ -257,8 +302,13 @@ uvicorn main:app --reload
 npm run dev
 ```
 
-### Production (Railway)
-The application is configured to deploy automatically on Railway using the Procfile.
+### Production (Railway/Docker)
+The application is configured to deploy automatically using Docker (see Dockerfile).
+
+```bash
+docker build -t myapp .
+docker run -p 8080:8080 myapp
+```
 
 ## Environment Variables
 Create a `.env` file with necessary environment variables (database URL, API keys, etc.)

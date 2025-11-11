@@ -29,6 +29,32 @@ class FrontendAgent(BaseAgent):
 
     def _build_prompt(self, filename: str, description: str) -> str:
         lang = "HTML" if filename.endswith(".html") else "CSS" if filename.endswith(".css") else "JavaScript"
+
+        # Instructions spécifiques pour CSS
+        css_instructions = ""
+        if filename.endswith(".css"):
+            css_instructions = """
+
+RÈGLES CSS (IMPORTANT pour éviter les conflits):
+- Utilise des sélecteurs spécifiques avec des classes préfixées
+- Évite les sélecteurs globaux trop génériques (body, div, span, etc.)
+- Préfère des classes BEM (Block Element Modifier) pour la nomenclature
+- Exemple: .app-container, .board-card, .user-list__item
+- Évite les !important sauf si absolument nécessaire
+- Utilise des variables CSS pour les couleurs et tailles communes:
+  :root {
+    --primary-color: #4CAF50;
+    --secondary-color: #2196F3;
+    --background-color: #f5f5f5;
+    --text-color: #333;
+    --border-radius: 8px;
+    --spacing: 16px;
+  }
+- Pour les interactions drag & drop, inclus ces classes utiles:
+  .dragging { opacity: 0.5; cursor: grabbing; }
+  .drag-over { border: 2px dashed var(--primary-color); background-color: rgba(76, 175, 80, 0.1); }
+"""
+
         return f"""Génère le code {lang} complet et fonctionnel pour le fichier `{filename}`.
 
 Description: {description}
@@ -39,7 +65,7 @@ IMPORTANT:
 - PAS de commentaires explicatifs avant ou après le code
 - PAS de description ou d'instructions
 - Commence directement par le code
-- Le code doit être complet et prêt à être utilisé
+- Le code doit être complet et prêt à être utilisé{css_instructions}
 
 Génère uniquement le contenu du fichier {lang}."""
 

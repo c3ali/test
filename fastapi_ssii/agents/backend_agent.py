@@ -35,6 +35,40 @@ class BackendAgent(BaseAgent):
         available_files = list(plan.get("files", {}).keys())
         files_info = "\n".join([f"- {f}" for f in available_files if f.endswith('.py')])
 
+        # Détecter si le projet a un frontend
+        has_frontend = any(f.endswith((".html", ".css", ".js", ".vue", ".jsx", ".tsx"))
+                          for f in available_files)
+
+        # Ajouter des instructions spéciales pour le fichier principal si frontend détecté
+        is_main_file = filename in ["main.py", "app.py", "server.py"]
+        frontend_instructions = ""
+
+        if has_frontend and is_main_file:
+            frontend_instructions = """
+
+SERVIR LE FRONTEND (TRÈS IMPORTANT):
+- Ce projet a un frontend qui sera construit dans le dossier dist/
+- Tu DOIS configurer FastAPI pour servir les fichiers statiques du frontend
+- Ajoute ces imports en haut du fichier:
+  from fastapi.staticfiles import StaticFiles
+  from fastapi.responses import FileResponse
+  import os
+
+- Après la création de l'app FastAPI, ajoute:
+  # Servir les fichiers statiques du frontend
+  app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+
+- À la FIN du fichier (après toutes les routes API), ajoute cette route catch-all:
+  @app.get("/{full_path:path}")
+  async def serve_frontend(full_path: str):
+      \"\"\"Serve the frontend for all non-API routes\"\"\"
+      file_path = f"dist/{full_path}"
+      if os.path.exists(file_path) and os.path.isfile(file_path):
+          return FileResponse(file_path)
+      # Fallback to index.html for SPA routing
+      return FileResponse("dist/index.html")
+"""
+
         return f"""Génère le code Python complet et fonctionnel pour le fichier `{filename}`.
 
 Description: {description}
@@ -79,7 +113,7 @@ TYPAGE PYTHON (IMPORTANT pour compatibilité Python 3.12/3.13):
 - Exemple CORRECT: Mapped[list["ClassName"]]
 - Exemple INCORRECT: Mapped[List["ClassName"]]
 - Pour les annotations de type normales (hors Mapped), tu peux utiliser list, dict, set directement
-- N'importe pas List, Dict, Set depuis typing sauf si absolument nécessaire
+- N'importe pas List, Dict, Set depuis typing sauf si absolument nécessaire{frontend_instructions}
 
 Génère uniquement le contenu du fichier Python."""
 
