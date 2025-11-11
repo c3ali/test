@@ -3,10 +3,13 @@ from fastapi_ssii.agents.backend_agent import BackendAgent
 from fastapi_ssii.agents.frontend_agent import FrontendAgent
 from fastapi_ssii.agents.qa_agent import QAAgent
 from fastapi_ssii.agents.business_analyst_agent import BusinessAnalystAgent
+from fastapi_ssii.agents.deployment_agent import DeploymentAgent
+from fastapi_ssii.agents.auto_debugger import AutoDebugger
 from fastapi_ssii import gemini_client
 from fastapi_ssii.core.logger import get_logger
 from fastapi_ssii.core.context_manager import ContextManager
 import asyncio
+import os
 
 logger = get_logger(__name__)
 
@@ -20,6 +23,10 @@ class Orchestrator:
             "frontend": FrontendAgent(llm_client),
             "qa": QAAgent(llm_client),
         }
+
+        # Agents de déploiement (optionnels selon tokens disponibles)
+        self.deployment_agent = DeploymentAgent(llm_client)
+        self.auto_debugger = AutoDebugger(llm_client, self.deployment_agent)
 
     def _scan_imports_from_code(self, code_files: dict) -> list:
         """
@@ -368,5 +375,73 @@ Create a `.env` file with necessary environment variables (database URL, API key
             "plan": plan,
             "tech_spec": tech_spec
         }
+
+    async def generate_and_deploy(self, description: str, auto_deploy: bool = False):
+        """
+        Pipeline complet: génération -> déploiement -> auto-correction -> production
+
+        Args:
+            description: Description du projet
+            auto_deploy: Si True, déploie automatiquement sur Railway/Supabase
+
+        Returns:
+            Dict avec code, plan, tech_spec, et infos de déploiement
+        """
+        logger.info("🚀 Phase 1: Génération du code")
+        generation_result = await self.generate_project(description)
+
+        if "error" in generation_result:
+            return generation_result
+
+        result = {
+            **generation_result,
+            "deployment": {"status": "not_requested"}
+        }
+
+        # Si le déploiement automatique est demandé
+        if auto_deploy:
+            railway_token = os.getenv("RAILWAY_TOKEN")
+            supabase_token = os.getenv("SUPABASE_ACCESS_TOKEN")
+
+            if not railway_token and not supabase_token:
+                logger.info("⚠️ Aucun token de déploiement trouvé, skip déploiement")
+                result["deployment"] = {
+                    "status": "skipped",
+                    "reason": "No RAILWAY_TOKEN or SUPABASE_ACCESS_TOKEN found"
+                }
+                return result
+
+            logger.info("🚀 Phase 2: Déploiement automatique avec auto-correction")
+
+            # Créer la spécification pour le déploiement
+            deployment_spec = {
+                "tech_spec": generation_result["tech_spec"],
+                "plan": generation_result["plan"],
+                "code_files": generation_result["code"]
+            }
+
+            # Déployer avec auto-correction
+            success, deploy_result = await self.auto_debugger.deploy_with_auto_fix(
+                generation_result["code"],
+                deployment_spec
+            )
+
+            if success:
+                logger.info("✅ Déploiement réussi avec auto-correction!")
+                result["deployment"] = {
+                    "status": "success",
+                    "iterations": deploy_result["iterations"],
+                    "logs": deploy_result["logs"],
+                    "details": deploy_result.get("deployment", {})
+                }
+            else:
+                logger.error("❌ Échec du déploiement après tentatives de correction")
+                result["deployment"] = {
+                    "status": "failed",
+                    "iterations": deploy_result["iterations"],
+                    "logs": deploy_result["logs"]
+                }
+
+        return result
 
 orchestrator = Orchestrator(gemini_client)

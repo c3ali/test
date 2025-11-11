@@ -32,10 +32,16 @@ async def async_generation_task(
     project_id: str,
     description: str,
     webhook_url: Optional[HttpUrl],
-    github_options: Optional[Dict]
+    github_options: Optional[Dict],
+    auto_deploy: bool = False
 ):
-    logger.info(f"Démarrage de la génération pour le projet.", project_id=project_id)
-    generation_result = await orchestrator.generate_project(description)
+    logger.info(f"Démarrage de la génération pour le projet.", project_id=project_id, auto_deploy=auto_deploy)
+
+    # Utiliser la méthode avec ou sans déploiement selon le flag
+    if auto_deploy:
+        generation_result = await orchestrator.generate_and_deploy(description, auto_deploy=True)
+    else:
+        generation_result = await orchestrator.generate_project(description)
 
     if "error" in generation_result:
         project_store.update_project(project_id, {"status": "failed", "error": generation_result["error"]})
@@ -72,9 +78,10 @@ def generation_task(
     project_id: str,
     description: str,
     webhook_url: Optional[HttpUrl],
-    github_options: Optional[Dict]
+    github_options: Optional[Dict],
+    auto_deploy: bool = False
 ):
-    asyncio.run(async_generation_task(project_id, description, webhook_url, github_options))
+    asyncio.run(async_generation_task(project_id, description, webhook_url, github_options, auto_deploy))
 
 
 async def send_to_webhook_async(webhook_url: HttpUrl, payload: Dict):
