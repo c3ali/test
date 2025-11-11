@@ -33,9 +33,19 @@ class FrontendAgent(BaseAgent):
 
     async def _generate_file(self, filename: str, prompt: str) -> (str, str):
         logger.info(f"Génération du fichier frontend : {filename}")
-        code = await self.llm_client.generate_with_gemini_async(prompt)
-        # (Nettoyage du code si nécessaire)
-        return filename, code
+        try:
+            code = await self.llm_client.generate_with_gemini_async(prompt)
+            # Nettoyage des balises markdown
+            if code.startswith("```html") or code.startswith("```css") or code.startswith("```javascript") or code.startswith("```js"):
+                lines = code.split('\n')
+                code = '\n'.join(lines[1:-1]).strip()
+            elif code.startswith("```"):
+                lines = code.split('\n')
+                code = '\n'.join(lines[1:-1]).strip()
+            return filename, code
+        except Exception as e:
+            logger.error(f"Erreur lors de la génération du fichier frontend : {filename}", error=str(e))
+            raise
 
     def validate_output(self, output: Dict[str, str]) -> List[str]:
         return []

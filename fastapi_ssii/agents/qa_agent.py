@@ -35,9 +35,18 @@ class QAAgent(BaseAgent):
 
     async def _generate_file(self, filename: str, prompt: str) -> (str, str):
         logger.info(f"Génération du fichier de test : {filename}")
-        code = await self.llm_client.generate_with_gemini_async(prompt)
-        # (Nettoyage)
-        return filename, code
+        try:
+            code = await self.llm_client.generate_with_gemini_async(prompt)
+            # Nettoyage des balises markdown
+            if code.startswith("```python"):
+                code = code[9:-4].strip()
+            elif code.startswith("```"):
+                lines = code.split('\n')
+                code = '\n'.join(lines[1:-1]).strip()
+            return filename, code
+        except Exception as e:
+            logger.error(f"Erreur lors de la génération du fichier de test : {filename}", error=str(e))
+            raise
 
     def validate_output(self, output: Dict[str, str]) -> List[str]:
         return []
