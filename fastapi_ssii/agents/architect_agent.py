@@ -23,20 +23,48 @@ Spécifications techniques:
 - Fonctionnalités: {', '.join(tech_spec.get('main_features', []))}
 - Entités de données: {', '.join([e['name'] for e in tech_spec.get('data_entities', [])])}
 
+🚨 RÈGLES OBLIGATOIRES POUR LES FICHIERS BACKEND:
+
+1. TOUJOURS inclure ces fichiers Python de base (MINIMUM):
+   - main.py: Point d'entrée FastAPI avec les routes et l'application
+   - models.py: TOUS les modèles SQLAlchemy (User, etc.) dans UN SEUL FICHIER
+   - schemas.py: TOUS les schémas Pydantic (*Base, *Create, *Response) dans UN SEUL FICHIER
+   - database.py: Configuration de la base de données (engine, SessionLocal, get_db)
+
+2. Si authentification JWT requise, ajouter:
+   - middleware/auth.py: Middleware d'authentification JWT
+
+3. Si CORS requis, ajouter:
+   - middleware/cors.py: Configuration CORS
+
+4. NE JAMAIS créer de packages (models/, schemas/, api/)
+   ✅ CORRECT: models.py, schemas.py (fichiers uniques)
+   ❌ INTERDIT: models/__init__.py, models/user.py
+
+5. Pour les entités de données: {', '.join([e['name'] for e in tech_spec.get('data_entities', [])])}
+   - TOUTES doivent être dans models.py
+   - TOUTES doivent avoir leurs schémas dans schemas.py
+
 IMPORTANT: Ta réponse doit contenir UNIQUEMENT un JSON valide, sans texte explicatif avant ou après, et sans balises markdown.
 
 Le JSON doit contenir exactement ces clés:
 - files: Un dictionnaire où chaque clé est un nom de fichier et chaque valeur est une description de ce que le fichier doit contenir (dict)
 - dependencies: Une liste des dépendances externes nécessaires (array of strings)
 
-Exemple de format:
+Exemple de format pour un projet avec User, Post, Comment:
 {{
   "files": {{
-    "main.py": "Point d'entrée de l'application FastAPI avec les routes",
-    "models.py": "Modèles de données SQLAlchemy",
-    "database.py": "Configuration de la base de données"
+    "main.py": "Point d'entrée FastAPI avec routes pour users, posts, comments. Inclut authentification JWT et CORS.",
+    "models.py": "Modèles SQLAlchemy: User, Post, Comment avec relations. Toutes les entités dans ce fichier unique.",
+    "schemas.py": "Schémas Pydantic: UserBase/Create/Response, PostBase/Create/Response, CommentBase/Create/Response, Token, TokenRefresh. Tous dans ce fichier unique.",
+    "database.py": "Configuration PostgreSQL avec SQLAlchemy: engine, SessionLocal, get_db, init_db",
+    "middleware/auth.py": "Middleware d'authentification JWT avec vérification des tokens",
+    "middleware/cors.py": "Configuration CORS avec origines autorisées",
+    "index.html": "Page d'accueil du frontend",
+    "static/style.css": "Styles CSS",
+    "static/script.js": "JavaScript pour interactions"
   }},
-  "dependencies": ["fastapi", "uvicorn", "sqlalchemy"]
+  "dependencies": ["fastapi>=0.115.0", "uvicorn[standard]", "sqlalchemy>=2.0.0", "pydantic>=2.0.0", "python-jose[cryptography]", "passlib[bcrypt]", "python-multipart", "psycopg2-binary", "loguru", "email-validator"]
 }}
 
 Réponds uniquement avec le JSON, commence directement par {{ et termine par }}."""
