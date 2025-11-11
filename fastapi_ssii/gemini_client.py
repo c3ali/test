@@ -32,7 +32,9 @@ def generate_with_gemini(prompt: str) -> str:
     try:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/c3ali/test",  # Requis par OpenRouter
+            "X-Title": "SSII FastAPI Agent"  # Optionnel mais recommandé
         }
 
         payload = {
@@ -44,17 +46,27 @@ def generate_with_gemini(prompt: str) -> str:
 
         with httpx.Client(timeout=120.0) as client:
             response = client.post(OPENROUTER_API_URL, json=payload, headers=headers)
+
+            # Meilleur logging des erreurs
+            if response.status_code != 200:
+                error_detail = response.text
+                print(f"[ERROR] OpenRouter API Error {response.status_code}: {error_detail}")
+
             response.raise_for_status()
 
             result = response.json()
             return result["choices"][0]["message"]["content"].strip()
 
+    except httpx.HTTPStatusError as e:
+        error_msg = f"HTTP {e.response.status_code}: {e.response.text[:500]}"
+        print(f"[ERROR] OpenRouter HTTP Error (sync): {error_msg}")
+        raise RuntimeError(f"Erreur OpenRouter API: {error_msg}") from e
     except httpx.HTTPError as e:
-        print(f"Erreur HTTP OpenRouter (sync) : {e}")
-        raise RuntimeError(f"Erreur lors de l'appel à l'API OpenRouter: {e}") from e
+        print(f"[ERROR] OpenRouter Network Error (sync): {e}")
+        raise RuntimeError(f"Erreur réseau OpenRouter: {e}") from e
     except Exception as e:
-        print(f"Erreur OpenRouter (sync) : {e}")
-        raise RuntimeError(f"Erreur lors de l'appel à l'API OpenRouter: {e}") from e
+        print(f"[ERROR] OpenRouter Unexpected Error (sync): {e}")
+        raise RuntimeError(f"Erreur inattendue OpenRouter: {e}") from e
 
 async def generate_with_gemini_async(prompt: str) -> str:
     """
@@ -66,7 +78,9 @@ async def generate_with_gemini_async(prompt: str) -> str:
     try:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/c3ali/test",  # Requis par OpenRouter
+            "X-Title": "SSII FastAPI Agent"  # Optionnel mais recommandé
         }
 
         payload = {
@@ -78,14 +92,24 @@ async def generate_with_gemini_async(prompt: str) -> str:
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(OPENROUTER_API_URL, json=payload, headers=headers)
+
+            # Meilleur logging des erreurs
+            if response.status_code != 200:
+                error_detail = response.text
+                print(f"[ERROR] OpenRouter API Error {response.status_code}: {error_detail}")
+
             response.raise_for_status()
 
             result = response.json()
             return result["choices"][0]["message"]["content"].strip()
 
+    except httpx.HTTPStatusError as e:
+        error_msg = f"HTTP {e.response.status_code}: {e.response.text[:500]}"
+        print(f"[ERROR] OpenRouter HTTP Error (async): {error_msg}")
+        raise RuntimeError(f"Erreur OpenRouter API: {error_msg}") from e
     except httpx.HTTPError as e:
-        print(f"Erreur HTTP OpenRouter (async) : {e}")
-        raise RuntimeError(f"Erreur lors de l'appel à l'API OpenRouter: {e}") from e
+        print(f"[ERROR] OpenRouter Network Error (async): {e}")
+        raise RuntimeError(f"Erreur réseau OpenRouter: {e}") from e
     except Exception as e:
-        print(f"Erreur OpenRouter (async) : {e}")
-        raise RuntimeError(f"Erreur lors de l'appel à l'API OpenRouter: {e}") from e
+        print(f"[ERROR] OpenRouter Unexpected Error (async): {e}")
+        raise RuntimeError(f"Erreur inattendue OpenRouter: {e}") from e
