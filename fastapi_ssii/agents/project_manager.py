@@ -50,6 +50,8 @@ class Orchestrator:
             'yaml': 'PyYAML',
             'dotenv': 'python-dotenv',
             'starlette': 'starlette',  # Dépendance de FastAPI pour StaticFiles
+            'loguru': 'loguru>=0.7.2',  # Logger avancé
+            'email_validator': 'email-validator>=2.1.0',  # Pour Pydantic EmailStr
         }
 
         detected_packages = set()

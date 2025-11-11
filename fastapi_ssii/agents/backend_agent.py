@@ -125,29 +125,45 @@ IMPORTANT:
 - Le code doit être complet et prêt à être exécuté
 - VÉRIFIE LA COHÉRENCE: Si tu importes une fonction, assure-toi qu'elle existe avec le même nom exact
 
+🚨 INTERDICTION ABSOLUE - STRUCTURE DE FICHIERS 🚨
+
+NE CRÉE JAMAIS de packages models/, schemas/, api/! Utilise UNIQUEMENT des fichiers .py:
+❌ INTERDIT: models/__init__.py, models/user.py, models/board.py
+❌ INTERDIT: schemas/__init__.py, schemas/user.py, schemas/board.py
+❌ INTERDIT: api/__init__.py, api/routes.py
+
+✅ OBLIGATOIRE: models.py (fichier unique avec toutes les classes)
+✅ OBLIGATOIRE: schemas.py (fichier unique avec tous les schémas)
+✅ OBLIGATOIRE: routes.py ou main.py (fichier unique avec toutes les routes)
+
+STRUCTURE CORRECTE:
+```
+project/
+  ├── models.py          ← TOUTES les classes SQLAlchemy ici
+  ├── schemas.py         ← TOUS les schémas Pydantic ici
+  ├── database.py        ← Configuration DB
+  ├── main.py            ← Routes et app FastAPI
+  └── middleware/        ← Seul répertoire autorisé (cors.py, auth.py)
+```
+
 IMPORTS ET STRUCTURE DE FICHIERS (TRÈS IMPORTANT):
-- Les fichiers comme models.py, schemas.py, database.py sont des FICHIERS UNIQUES, PAS des packages/répertoires
-- Même si le projet est dans un package (backend/, app/, etc.), ces fichiers restent des fichiers uniques
+- models.py, schemas.py, database.py sont des FICHIERS UNIQUES, PAS des packages
+- TOUS les modèles SQLAlchemy vont dans models.py (User, Post, Board, Label, Card, etc.)
+- TOUS les schémas Pydantic vont dans schemas.py (UserBase, UserCreate, UserResponse, etc.)
 
 EXEMPLES D'IMPORTS CORRECTS:
-✅ from models import User, Post, Board
-✅ from schemas import UserCreate, UserResponse, BoardSchema
+✅ from models import User, Post, Board, Card, Label, Comment
+✅ from schemas import UserBase, UserCreate, UserResponse, TokenResponse
 ✅ from database import engine, SessionLocal, get_db
-✅ from backend.models import User, Post (si backend/ est un package)
-✅ from backend.schemas import UserSchema, BoardSchema (si backend/ est un package)
-✅ from app.models import User (si app/ est un package)
 
 EXEMPLES D'IMPORTS INCORRECTS:
-❌ from models.user import User (models.user n'existe PAS - models.py est un fichier unique)
-❌ from models.post import Post (models.post n'existe PAS)
-❌ from schemas.board import BoardSchema (schemas.board n'existe PAS - schemas.py est un fichier unique)
-❌ from backend.models.user import User (backend.models.user n'existe PAS)
-❌ from backend.schemas.board import BoardSchema (backend.schemas.board n'existe PAS)
-❌ from app.schemas.user import UserSchema (app.schemas.user n'existe PAS)
+❌ from models.user import User
+❌ from models.board import Board
+❌ from schemas.user import UserBase
+❌ from schemas.board import BoardSchema
+❌ from api.routes import router
 
-RÈGLE SIMPLE: N'ajoute JAMAIS de sous-module après models, schemas, database, etc.
-- Si tu as besoin de User depuis models.py, utilise: from models import User ou from backend.models import User
-- PAS from models.user ou from backend.models.user
+RÈGLE: models.py et schemas.py sont des fichiers MONOLITHIQUES qui contiennent TOUT
 
 TYPAGE PYTHON (IMPORTANT pour compatibilité Python 3.12/3.13):
 - Pour SQLAlchemy avec Mapped, utilise TOUJOURS les types en minuscules (list, dict, set) au lieu de typing.List, typing.Dict, etc.
@@ -156,31 +172,56 @@ TYPAGE PYTHON (IMPORTANT pour compatibilité Python 3.12/3.13):
 - Pour les annotations de type normales (hors Mapped), tu peux utiliser list, dict, set directement
 - N'importe pas List, Dict, Set depuis typing sauf si absolument nécessaire
 
-CONVENTIONS DE NOMMAGE (CRITIQUE pour éviter les erreurs d'import):
-Utilise TOUJOURS ces noms de fonctions standards pour assurer la cohérence:
+CONVENTIONS DE NOMMAGE PYDANTIC (CRITIQUE):
+Les schémas Pydantic doivent suivre ces conventions EXACTES:
 
-📁 middleware/cors.py → fonction: setup_cors(app)
-   Import dans main.py: from middleware.cors import setup_cors
+📁 schemas.py doit contenir:
+  - UserBase, UserCreate, UserUpdate, UserResponse  ← PAS UserSchema
+  - BoardBase, BoardCreate, BoardUpdate, BoardResponse
+  - CardBase, CardCreate, CardUpdate, CardResponse
+  - Token, TokenResponse, TokenRefresh  ← OBLIGATOIRE pour l'auth
+  - Tous les schémas avec suffixes: Base, Create, Update, Response
 
-📁 middleware/auth.py → fonction: setup_auth(app)
-   Import dans main.py: from middleware.auth import setup_auth
+❌ INTERDIT: UserSchema, BoardSchema, CardSchema
+✅ OBLIGATOIRE: UserBase, BoardBase, CardBase
 
-📁 database.py → fonctions: get_db(), init_db()
-   Import: from database import get_db, init_db
+Pour l'authentification, TOUJOURS inclure:
+```python
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
-📁 config.py → classe: Settings (avec @property)
-   Import: from config import Settings
+class TokenRefresh(BaseModel):
+    refresh_token: str
+```
 
-📁 utils/*.py → noms descriptifs simples (get_*, create_*, validate_*)
-   Exemple: utils/email.py → send_email(), validate_email()
-   Import: from utils.email import send_email
+IMPORTS CIRCULAIRES - PRÉVENTION (CRITIQUE):
+Pour éviter les imports circulaires dans schemas.py:
 
-RÈGLE D'OR: Si tu crées middleware/cors.py avec setup_cors, TOUS les imports doivent utiliser setup_cors, PAS add_cors_middleware ou autre nom !
+```python
+from typing import TYPE_CHECKING
+from pydantic import BaseModel
 
-Vérifie la cohérence:
-1. Définis la fonction: def setup_cors(app): ...
-2. Importe exactement le même nom: from middleware.cors import setup_cors
-3. Appelle exactement le même nom: setup_cors(app){frontend_instructions}
+if TYPE_CHECKING:
+    from models import User, Board  # Import pour type hints seulement
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    boards: list["BoardResponse"]  # Forward reference avec string
+```
+
+N'importe JAMAIS depuis schemas dans schemas:
+❌ from schemas import UserResponse  # Import circulaire!
+✅ Utilise forward references: list["UserResponse"]
+
+CONVENTIONS DE NOMMAGE FONCTIONS (CRITIQUE):
+📁 middleware/cors.py → setup_cors(app)
+📁 middleware/auth.py → setup_auth(app)
+📁 database.py → get_db(), init_db()
+📁 config.py → Settings (classe)
+
+RÈGLE D'OR: Si tu crées setup_cors(), utilise setup_cors() partout, PAS add_cors_middleware !{frontend_instructions}
 
 Génère uniquement le contenu du fichier Python."""
 
