@@ -12,28 +12,68 @@ class BackendAgent(BaseAgent):
 
     async def generate(self, specification: Dict[str, Any]) -> Dict[str, str]:
         """
-        Génère le code du backend en parallèle pour chaque fichier pertinent du plan.
+        Génère le code du backend en deux phases pour éviter les incohérences d'imports:
+        Phase 1: Générer tous les modules utilitaires (models, middleware, etc.)
+        Phase 2: Générer le fichier principal (main.py) avec le contexte des autres fichiers
         """
         plan = specification.get("plan", {})
         backend_files = {f: d for f, d in plan.get("files", {}).items() if f.endswith(".py") and not f.startswith("tests/")}
 
-        tasks = []
+        # Séparer les fichiers en deux groupes
+        main_files = ["main.py", "app.py", "server.py"]
+        utility_files = {}
+        entry_files = {}
+
         for filename, description in backend_files.items():
+            if filename in main_files:
+                entry_files[filename] = description
+            else:
+                utility_files[filename] = description
+
+        # Phase 1: Générer les fichiers utilitaires en parallèle
+        logger.info(f"Phase 1: Génération de {len(utility_files)} fichiers utilitaires")
+        utility_tasks = []
+        for filename, description in utility_files.items():
             prompt = self._build_prompt(filename, description, plan)
-            tasks.append(self._generate_file(filename, prompt))
+            utility_tasks.append(self._generate_file(filename, prompt))
 
-        logger.info(f"Lancement de la génération parallèle de {len(tasks)} fichiers backend.")
-        generated_files = await asyncio.gather(*tasks)
+        utility_results = await asyncio.gather(*utility_tasks) if utility_tasks else []
+        generated_code = {filename: code for filename, code in utility_results}
 
-        return {filename: code for filename, code in generated_files}
+        # Phase 2: Générer les fichiers d'entrée avec le contexte des utilitaires
+        logger.info(f"Phase 2: Génération de {len(entry_files)} fichier(s) d'entrée avec contexte")
+        entry_tasks = []
+        for filename, description in entry_files.items():
+            prompt = self._build_prompt(filename, description, plan, generated_code)
+            entry_tasks.append(self._generate_file(filename, prompt))
 
-    def _build_prompt(self, filename: str, description: str, plan: Dict) -> str:
+        entry_results = await asyncio.gather(*entry_tasks) if entry_tasks else []
+        for filename, code in entry_results:
+            generated_code[filename] = code
+
+        return generated_code
+
+    def _build_prompt(self, filename: str, description: str, plan: Dict, generated_code: Dict[str, str] = None) -> str:
         """
         Construit le prompt pour la génération de code backend.
+        Si generated_code est fourni, extrait les signatures de fonctions pour le contexte.
         """
         # Extraire la liste des fichiers du plan pour aider le LLM
         available_files = list(plan.get("files", {}).keys())
         files_info = "\n".join([f"- {f}" for f in available_files if f.endswith('.py')])
+
+        # Si on a du code déjà généré, extraire les noms de fonctions/classes
+        context_info = ""
+        if generated_code:
+            context_info = "\n\nCONTEXTE - Fonctions/Classes déjà définies dans les autres fichiers:\n"
+            for gen_filename, gen_code in generated_code.items():
+                # Extraire les définitions de fonctions et classes
+                functions = self._extract_definitions(gen_code)
+                if functions:
+                    context_info += f"\n📁 {gen_filename}:\n"
+                    for func_name in functions:
+                        context_info += f"  - {func_name}\n"
+            context_info += "\n⚠️ IMPORTANT: Utilise EXACTEMENT ces noms lors de l'import, PAS d'autres noms !\n"
 
         # Détecter si le projet a un frontend
         has_frontend = any(f.endswith((".html", ".css", ".js", ".vue", ".jsx", ".tsx"))
@@ -74,7 +114,7 @@ SERVIR LE FRONTEND (TRÈS IMPORTANT):
 Description: {description}
 
 Fichiers Python disponibles dans le projet:
-{files_info}
+{files_info}{context_info}
 
 IMPORTANT:
 - Réponds UNIQUEMENT avec du code Python pur, sans aucun texte explicatif
@@ -219,6 +259,28 @@ Génère uniquement le contenu du fichier Python."""
         except Exception as e:
             logger.error(f"Erreur lors de la génération du fichier backend : {filename}", error=str(e))
             raise
+
+    def _extract_definitions(self, code: str) -> List[str]:
+        """
+        Extrait les noms de fonctions et classes définies dans le code.
+        """
+        import re
+        definitions = []
+
+        # Extraire les classes
+        class_pattern = r'^class\s+([A-Za-z_][A-Za-z0-9_]*)'
+        for match in re.finditer(class_pattern, code, re.MULTILINE):
+            definitions.append(f"class {match.group(1)}")
+
+        # Extraire les fonctions (incluant async)
+        func_pattern = r'^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\('
+        for match in re.finditer(func_pattern, code, re.MULTILINE):
+            func_name = match.group(1)
+            # Ignorer les méthodes privées et les méthodes magiques pour simplifier
+            if not func_name.startswith('_'):
+                definitions.append(f"def {func_name}()")
+
+        return definitions
 
     def validate_output(self, output: Dict[str, str]) -> List[str]:
         # La validation sera implémentée avec le CodeValidator
