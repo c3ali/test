@@ -21,7 +21,63 @@ class Orchestrator:
             "qa": QAAgent(llm_client),
         }
 
-    def _generate_deployment_files(self, plan: dict, tech_spec: dict) -> dict:
+    def _scan_imports_from_code(self, code_files: dict) -> list:
+        """
+        Scanne le code généré pour détecter les imports et mapper aux packages pip.
+        """
+        import re
+
+        # Mapping des imports vers les packages pip
+        import_to_package = {
+            'psycopg2': 'psycopg2-binary',
+            'pymysql': 'pymysql',
+            'sqlalchemy': 'sqlalchemy',
+            'redis': 'redis',
+            'celery': 'celery',
+            'pandas': 'pandas',
+            'numpy': 'numpy',
+            'requests': 'requests',
+            'aiohttp': 'aiohttp',
+            'jwt': 'PyJWT',
+            'bcrypt': 'bcrypt',
+            'passlib': 'passlib',
+            'pydantic': 'pydantic',
+            'jinja2': 'jinja2',
+            'PIL': 'Pillow',
+            'cv2': 'opencv-python',
+            'matplotlib': 'matplotlib',
+            'bs4': 'beautifulsoup4',
+            'yaml': 'PyYAML',
+            'dotenv': 'python-dotenv',
+        }
+
+        detected_packages = set()
+
+        # Scanner tous les fichiers Python générés
+        for filename, code in code_files.items():
+            if not filename.endswith('.py'):
+                continue
+
+            # Trouver tous les imports
+            # Pattern pour: import X, from X import Y
+            import_patterns = [
+                r'^\s*import\s+([a-zA-Z0-9_]+)',
+                r'^\s*from\s+([a-zA-Z0-9_]+)',
+            ]
+
+            for line in code.split('\n'):
+                for pattern in import_patterns:
+                    match = re.match(pattern, line)
+                    if match:
+                        module_name = match.group(1)
+                        # Mapper au package pip si connu
+                        if module_name in import_to_package:
+                            detected_packages.add(import_to_package[module_name])
+                            logger.info(f"Détecté dépendance: {import_to_package[module_name]} (import {module_name})")
+
+        return list(detected_packages)
+
+    def _generate_deployment_files(self, plan: dict, tech_spec: dict, generated_code: dict = None) -> dict:
         """
         Génère les fichiers de configuration nécessaires pour le déploiement.
         """
@@ -34,6 +90,17 @@ class Orchestrator:
 
         # 2. requirements.txt pour Python/FastAPI
         dependencies = plan.get("dependencies", [])
+
+        # Scanner le code généré pour détecter les imports manquants
+        if generated_code:
+            detected_deps = self._scan_imports_from_code(generated_code)
+            # Ajouter les dépendances détectées si pas déjà présentes
+            for dep in detected_deps:
+                dep_name = dep.split('>=')[0].split('==')[0]  # Extraire le nom sans version
+                if not any(dep_name in d for d in dependencies):
+                    dependencies.append(dep)
+                    logger.info(f"Ajout automatique de la dépendance détectée: {dep}")
+
         if dependencies:
             # S'assurer que les dépendances de base FastAPI sont présentes avec versions compatibles
             essential_deps = {
@@ -236,7 +303,9 @@ Create a `.env` file with necessary environment variables (database URL, API key
         tests = await self.agents["qa"].generate(specification)
 
         logger.info("Phase 5: Deployment Configuration")
-        deployment_files = self._generate_deployment_files(plan, tech_spec)
+        # Rassembler le code généré pour la détection des dépendances
+        all_generated_code = {**backend_code, **frontend_code, **tests}
+        deployment_files = self._generate_deployment_files(plan, tech_spec, all_generated_code)
 
         logger.info("Phase 6: Assembly")
         full_code = {**backend_code, **frontend_code, **tests, **deployment_files}
