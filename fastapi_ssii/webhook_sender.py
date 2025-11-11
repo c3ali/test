@@ -1,6 +1,7 @@
 import httpx
 from pydantic import HttpUrl
 from fastapi_ssii.agents.project_manager import orchestrator
+from fastapi_ssii.agents.devops_agent import DevOpsAgent
 from fastapi_ssii import project_store, gemini_client
 from fastapi_ssii.core.logger import get_logger
 import asyncio
@@ -8,6 +9,7 @@ import re
 from typing import Optional, Dict
 
 logger = get_logger(__name__)
+devops_agent = DevOpsAgent()
 
 
 async def generate_repo_name(description: str) -> str:
@@ -74,4 +76,71 @@ def generation_task(
 ):
     asyncio.run(async_generation_task(project_id, description, webhook_url, github_options))
 
-# ... (le reste du fichier)
+
+async def send_to_webhook_async(webhook_url: HttpUrl, payload: Dict):
+    """
+    Envoie un payload à une URL de webhook de manière asynchrone.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(str(webhook_url), json=payload, timeout=10.0)
+            response.raise_for_status()
+            logger.info(f"Webhook appelé avec succès : {webhook_url}")
+    except httpx.HTTPError as e:
+        logger.error(f"Erreur lors de l'appel du webhook : {e}")
+    except Exception as e:
+        logger.error(f"Erreur inattendue lors de l'appel du webhook : {e}")
+
+
+async def async_refinement_task(
+    project_id: str,
+    feedback: str,
+    webhook_url: Optional[HttpUrl]
+):
+    """
+    Tâche asynchrone de raffinement d'un projet basé sur le feedback.
+    """
+    logger.info(f"Démarrage du raffinement pour le projet.", project_id=project_id)
+
+    project = project_store.get_project(project_id)
+    if not project:
+        logger.error(f"Projet non trouvé pour le raffinement.", project_id=project_id)
+        return
+
+    # Mettre à jour le statut du projet
+    project_store.update_project(project_id, {"status": "refining"})
+
+    # Pour le moment, on régénère le projet avec la description enrichie du feedback
+    # Dans une version plus avancée, on pourrait avoir une méthode spécifique de raffinement
+    enhanced_description = f"{project.get('description', '')} \n\nFeedback pour amélioration: {feedback}"
+
+    refinement_result = await orchestrator.generate_project(enhanced_description)
+
+    if "error" in refinement_result:
+        project_store.update_project(project_id, {"status": "failed", "error": refinement_result["error"]})
+        logger.error("Le raffinement du projet a échoué.", project_id=project_id, error=refinement_result["error"])
+        return
+
+    project_store.save_generated_code(project_id, refinement_result)
+
+    final_payload = {
+        "project_id": project_id,
+        "status": "refined",
+        **refinement_result
+    }
+
+    if webhook_url:
+        await send_to_webhook_async(webhook_url, final_payload)
+
+    logger.info(f"Processus de raffinement pour le projet terminé.", project_id=project_id)
+
+
+def refinement_task(
+    project_id: str,
+    feedback: str,
+    webhook_url: Optional[HttpUrl]
+):
+    """
+    Tâche synchrone de raffinement pour être utilisée avec BackgroundTasks.
+    """
+    asyncio.run(async_refinement_task(project_id, feedback, webhook_url))
