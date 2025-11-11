@@ -43,6 +43,13 @@ IMPORTANT:
 - Commence directement par les imports ou le code
 - Le code doit être complet et prêt à être exécuté
 
+TYPAGE PYTHON (IMPORTANT pour compatibilité Python 3.12/3.13):
+- Pour SQLAlchemy avec Mapped, utilise TOUJOURS les types en minuscules (list, dict, set) au lieu de typing.List, typing.Dict, etc.
+- Exemple CORRECT: Mapped[list["ClassName"]]
+- Exemple INCORRECT: Mapped[List["ClassName"]]
+- Pour les annotations de type normales (hors Mapped), tu peux utiliser list, dict, set directement
+- N'importe pas List, Dict, Set depuis typing sauf si absolument nécessaire
+
 Génère uniquement le contenu du fichier Python."""
 
     def _clean_code_response(self, code: str) -> str:
