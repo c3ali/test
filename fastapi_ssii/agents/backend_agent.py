@@ -51,14 +51,28 @@ IMPORTANT:
 - Le code doit être complet et prêt à être exécuté
 
 IMPORTS ET STRUCTURE DE FICHIERS (TRÈS IMPORTANT):
-- Les fichiers comme models.py, schemas.py, database.py sont des FICHIERS UNIQUES, pas des packages
-- CORRECT: from models import User, Post
-- CORRECT: from database import engine, SessionLocal
-- INCORRECT: from models.user import User (models n'est PAS un package)
-- INCORRECT: from models.post import Post (models n'est PAS un package)
-- Si le fichier est dans un sous-dossier (ex: routers/users.py), utilise des imports relatifs ou absolus corrects
-- Exemple pour routers/users.py: from models import User OU from ..models import User
-- NE crée PAS d'imports vers des sous-modules qui n'existent pas
+- Les fichiers comme models.py, schemas.py, database.py sont des FICHIERS UNIQUES, PAS des packages/répertoires
+- Même si le projet est dans un package (backend/, app/, etc.), ces fichiers restent des fichiers uniques
+
+EXEMPLES D'IMPORTS CORRECTS:
+✅ from models import User, Post, Board
+✅ from schemas import UserCreate, UserResponse, BoardSchema
+✅ from database import engine, SessionLocal, get_db
+✅ from backend.models import User, Post (si backend/ est un package)
+✅ from backend.schemas import UserSchema, BoardSchema (si backend/ est un package)
+✅ from app.models import User (si app/ est un package)
+
+EXEMPLES D'IMPORTS INCORRECTS:
+❌ from models.user import User (models.user n'existe PAS - models.py est un fichier unique)
+❌ from models.post import Post (models.post n'existe PAS)
+❌ from schemas.board import BoardSchema (schemas.board n'existe PAS - schemas.py est un fichier unique)
+❌ from backend.models.user import User (backend.models.user n'existe PAS)
+❌ from backend.schemas.board import BoardSchema (backend.schemas.board n'existe PAS)
+❌ from app.schemas.user import UserSchema (app.schemas.user n'existe PAS)
+
+RÈGLE SIMPLE: N'ajoute JAMAIS de sous-module après models, schemas, database, etc.
+- Si tu as besoin de User depuis models.py, utilise: from models import User ou from backend.models import User
+- PAS from models.user ou from backend.models.user
 
 TYPAGE PYTHON (IMPORTANT pour compatibilité Python 3.12/3.13):
 - Pour SQLAlchemy avec Mapped, utilise TOUJOURS les types en minuscules (list, dict, set) au lieu de typing.List, typing.Dict, etc.
