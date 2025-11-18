@@ -16,6 +16,7 @@ class ProjectRequest(BaseModel):
     description: str
     response_webhook_url: Optional[HttpUrl] = None
     github_options: Optional[GitHubOptions] = None
+    auto_deploy: bool = False  # Nouveau: déploiement automatique
 
 class ImmediateResponse(BaseModel):
     status: str
@@ -38,9 +39,9 @@ class ProjectStatusResponse(BaseModel):
 # --- Application FastAPI ---
 
 app = FastAPI(
-    title="Interactive SSII Agency (GitHub Integrated)",
-    description="Une API pour générer du code, le raffiner, et le pousser sur GitHub.",
-    version="0.6.0",
+    title="Autonomous Code Generation Platform",
+    description="Génère, déploie et corrige automatiquement des applications complètes avec Railway et Supabase.",
+    version="1.0.0",
 )
 
 # (Le reste de l'application reste le même)
@@ -62,6 +63,12 @@ async def generate_project_async(
     request: ProjectRequest,
     background_tasks: BackgroundTasks
 ):
+    """
+    Génère un projet complet.
+
+    Si auto_deploy=True, déploie automatiquement sur Railway + Supabase.
+    Nécessite les tokens RAILWAY_TOKEN et/ou SUPABASE_ACCESS_TOKEN dans .env
+    """
     project_id = project_store.create_new_project(request.description)
 
     background_tasks.add_task(
@@ -69,12 +76,15 @@ async def generate_project_async(
         project_id,
         request.description,
         request.response_webhook_url,
-        request.github_options.model_dump() if request.github_options else None
+        request.github_options.model_dump() if request.github_options else None,
+        request.auto_deploy  # Nouveau paramètre
     )
+
+    deploy_msg = " + déploiement automatique" if request.auto_deploy else ""
 
     return {
         "status": "accepted",
-        "message": "La demande de génération a été acceptée.",
+        "message": f"La demande de génération{deploy_msg} a été acceptée.",
         "project_id": project_id,
     }
 

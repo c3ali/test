@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const githubRepoInput = document.getElementById('github-repo-name');
     const githubPrivateInput = document.getElementById('github-is-private');
     const githubLinkContainer = document.getElementById('github-link');
+    const autoDeployCheckbox = document.getElementById('auto-deploy');
 
     let currentProjectId = null;
 
@@ -32,7 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
         disableButtons(true);
         setStatus('Demande envoyée. Préparation de la génération...');
 
-        let requestBody = { description: description };
+        let requestBody = {
+            description: description,
+            auto_deploy: autoDeployCheckbox.checked
+        };
+
         if (deployCheckbox.checked) {
             requestBody.github_options = {
                 repo_name: githubRepoInput.value.trim(), // Le backend gérera si c'est vide
